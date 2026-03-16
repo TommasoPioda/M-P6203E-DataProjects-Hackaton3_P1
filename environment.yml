@@ -12,3 +12,9 @@ dependencies:
   - scikit-learn
   - pyarrow
   - pytorch
+  - transformers
+  - torchvision
+  - torchaudio
+  - pip
+  - pip:
+    - sentence-transformers
