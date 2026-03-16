@@ -2,6 +2,8 @@
 node_modules/
 vendor/
 Data/
+data/
+DBLP-Citation-network-V18*
 
 # Logs
 logs/
@@ -47,3 +49,4 @@ coverage/
 tmp/
 temp/
 *.tmp
+
