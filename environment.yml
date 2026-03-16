@@ -1,0 +1,14 @@
+name: hack_03
+channels:
+  - conda-forge
+dependencies:
+  - ipykernel
+  - jupyter
+  - matplotlib
+  - numpy
+  - pandas
+  - python=3.11
+  - seaborn
+  - scikit-learn
+  - pyarrow
+  - pytorch
