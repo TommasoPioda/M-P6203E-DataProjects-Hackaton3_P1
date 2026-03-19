@@ -2,21 +2,6 @@ import pandas as pd
 import os
 import sys
 
-try:
-    import pyarrow
-except ImportError as e:
-    print("\n" + "!"*80)
-    print(f"ERRORE CRITICO DI IMPORTAZIONE: {e}")
-    print("!"*80)
-    print("\nSembra che ci sia un problema con l'installazione di 'pyarrow' (DLL load failed).")
-    print("Questo è un problema comune su Windows con gli ambienti Conda.")
-    print("\nPER RISOLVERE, ESEGUI QUESTO COMANDO NEL TERMINALE:")
-    print("    pip install --force-reinstall pyarrow")
-    print("\nOppure se preferisci conda:")
-    print("    conda install -c conda-forge pyarrow")
-    print("\n" + "!"*80 + "\n")
-    sys.exit(1)
-
 def main():
     # Get the directory where this script is located
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,17 +11,17 @@ def main():
     # root/
     #   preprocessing/
     #     json_to_parquet.py
-    #   Data/
+    #   data/
     #     DBLP-Citation-network-V18/
     #       DBLP-Citation-network-V18.jsonl
     #     parquet/
     
-    dataset_path = os.path.join(script_dir, "..", "Data", "DBLP-Citation-network-V18", "DBLP-Citation-network-V18.jsonl")
-    output_dir = os.path.join(script_dir, "..", "Data", "parquet")
+    DATA_PATH = os.path.join(script_dir, "..", "data", "DBLP-Citation-network-V18", "DBLP-Citation-network-V18.jsonl")
+    OUTPUT_DIR = os.path.join(script_dir, "..", "data", "parquet")
     
     # Normalize paths
-    dataset_path = os.path.normpath(dataset_path)
-    output_dir = os.path.normpath(output_dir)
+    dataset_path = os.path.normpath(DATA_PATH)
+    output_dir = os.path.normpath(OUTPUT_DIR)
 
     print(f"Dataset path: {dataset_path}")
     print(f"Output directory: {output_dir}")
