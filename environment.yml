@@ -2,19 +2,19 @@ name: hack_03
 channels:
   - conda-forge
 dependencies:
+  - python=3.11
   - ipykernel
   - jupyter
   - matplotlib
   - numpy
   - pandas
-  - python=3.11
   - seaborn
   - scikit-learn
   - pyarrow
-  - pytorch
-  - transformers
-  - torchvision
-  - torchaudio
   - pip
   - pip:
-    - sentence-transformers
+      - torch
+      - torchvision
+      - torchaudio
+      - sentence-transformers
+      - transformers
