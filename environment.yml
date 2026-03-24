@@ -11,7 +11,7 @@ dependencies:
   - seaborn
   - scikit-learn
   - pyarrow
-  - pip
+  - tqdm
   - pip:
       - torch
       - torchvision
