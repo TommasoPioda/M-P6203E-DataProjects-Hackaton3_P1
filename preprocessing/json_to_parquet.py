@@ -19,8 +19,7 @@ def main():
     #     parquet/
     
     DATA_PATH = os.path.join(script_dir, "..", "data", "DBLP-Citation-network-V18", "DBLP-Citation-network-V18.jsonl")
-    #OUTPUT_DIR = os.path.join(script_dir, "..", "data", "parquet")
-    OUTPUT_DIR = os.path.join(script_dir, "..", "data", "other_parquet")
+    OUTPUT_DIR = os.path.join(script_dir, "..", "data", "parquet")
     
 
     # Normalize paths
