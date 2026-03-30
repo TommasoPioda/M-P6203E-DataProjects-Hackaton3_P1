@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import sys
 import glob
+import shutil
 
 
 def main():
@@ -19,8 +20,8 @@ def main():
     #     parquet/
     
     DATA_PATH = os.path.join(script_dir, "..", "data", "DBLP-Citation-network-V18", "DBLP-Citation-network-V18.jsonl")
-    OUTPUT_DIR = os.path.join(script_dir, "..", "data", "parquet")
-    
+    #OUTPUT_DIR = os.path.join(script_dir, "..", "data", "parquet")
+    OUTPUT_DIR = os.path.join(script_dir, "..", "data", "year_parquet")
 
     # Normalize paths
     dataset_path = os.path.normpath(DATA_PATH)
@@ -103,6 +104,7 @@ def main():
             
         for folder in os.listdir(OUTPUT_DIR):
             folder_path = os.path.join(OUTPUT_DIR, folder)
+            output_path = OUTPUT_DIR
             
             if not os.path.isdir(folder_path):
                 continue
@@ -124,7 +126,7 @@ def main():
             
             
             # Save single file
-            output_file = os.path.join(folder_pah, f"{folder}.parquet")
+            output_file = os.path.join(output_path, f"{folder}.parquet")
             combined.to_parquet(
                 output_file,
                 engine="pyarrow",
@@ -133,10 +135,8 @@ def main():
             
             print(f"Saved merged file: {output_file}")
             
-            # Delete old files
-            for f in files:
-                if f != output_file:
-                    os.remove(f)
+            # Delete old files and directories
+            shutil.rmtree(folder_path)
                     
             print(f"Deleted all old files")
 
