@@ -16,7 +16,7 @@ def network_creation(df: pd.DataFrame) -> nx.DiGraph:
             - "references": list of papers IDs
          
     Returns:
-        nx.DiGraph: A directed graph object where nodes are paper IDs and 
+        graph (nx.DiGraph): A directed graph object where nodes are paper IDs and 
         edges represent the citations.
     """
     edges = []
@@ -115,9 +115,17 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
             - "in_a": In-degree of the paper A (number of citations received by paper A)
             - "out_a": Out-degree of paper A (number of paper cited by A)
             - "pagerank_a": Pagerank of paper A (importance of the paper A in the network)
+            - "eigen_cent_a": Eigenvector centrality of paper A (importance of the papers that cite paper A)
+            - "avg_neigh_degree_a": Average neighbor degree of paper A (average degree of the papers connected to paper A)
+            - "katz_cent_a":  Katz Centrality of paper A (Measure measures the influence of paper A by 
+                considering both direct and indirect connections)
             - "in_b": In-degree of the paper B (number of citations received by paper B)
             - "out_b": Out-degree of paper B (number of paper cited by B)
             - "pagerank_b":Pagerank of paper B (importance of the paper B in the network)
+            - "eigen_cent_b": Eigenvector centrality of paper B (importance of the papers that cite paper B)
+            - "avg_neigh_degree_b": Average neighbor degree of paper B (average degree of the papers connected to paper B)
+            - "katz_cent_b":  Katz Centrality of paper B (Measure measures the influence of paper B by 
+                considering both direct and indirect connections)
             - "degree_ratio": Ratio between the out-degree of paper A and paper B
             - "pagerank_ratio": Ratio between Pagerank of paper A and Paper B
             - "pagerank_prod": Product of PageRank scores for paper A and paper B
@@ -141,6 +149,22 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
     
     # Create a undirected copy of the graph
     graph_und = graph.to_undirected()
+
+    # Calculate the eigenvector centrality 
+    # of the graph
+    eigen_cent = nx.eigenvector_centrality(graph)
+    
+    # Calculate the average of the neighborhood
+    # of each node
+    avg_neigh_degree = nx.average_neighbor_degree(graph, source="out", target="out")
+    
+    # Compute the Katz centrality for the nodes 
+    # of the graph
+    katz_cent = nx.katz_centrality(graph)
+    
+    # Compute the shortest-path betweenness 
+    # centrality for nodes
+    #betw_cent = nx.betweenness_centrality(graph, k=None, normalized=True)
     
     # Create a list of pairs of papers
     pairs = list(zip(df_feats["node_a"], df_feats["node_b"]))
@@ -150,12 +174,20 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
     df_feats["in_a"] = df_feats["node_a"].map(in_degree)
     df_feats["out_a"] = df_feats["node_a"].map(out_degree)
     df_feats["pagerank_a"] = df_feats["node_a"].map(pagerank)
-
+    df_feats["eigen_cent_a"] = df_feats["node_a"].map(eigen_cent).fillna(0)
+    df_feats["avg_neigh_degree_a"] = df_feats["node_a"].map(avg_neigh_degree).fillna(0)
+    df_feats["katz_cent_a"] = df_feats["node_a"].map(katz_cent).fillna(0)
+    #df_feats["betw_cent_a"] = df_feats["node_a"].map(betw_cent).fillna(0)
+        
     # Add to the DataFrame the nodes
     # features of node B
     df_feats["in_b"] = df_feats["node_b"].map(in_degree)
     df_feats["out_b"] = df_feats["node_b"].map(out_degree)
     df_feats["pagerank_b"] = df_feats["node_b"].map(pagerank)
+    df_feats["eigen_cent_b"] = df_feats["node_b"].map(eigen_cent).fillna(0)
+    df_feats["avg_neigh_degree_b"] = df_feats["node_b"].map(avg_neigh_degree).fillna(0)
+    df_feats["katz_cent_b"] = df_feats["node_b"].map(katz_cent).fillna(0)
+    #df_feats["betw_cent_b"] = df_feats["node_b"].map(betw_cent).fillna(0)
     
     # Compute and append to the DataFrame...
     # ...the ratio of papers that the two paper cite
@@ -183,7 +215,7 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
         jaccard_scores.get((u, v), 0)
         for u, v in pairs
     ]
-    
+
     return df_feats
 
 
