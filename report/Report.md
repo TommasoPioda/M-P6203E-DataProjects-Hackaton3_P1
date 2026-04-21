@@ -232,26 +232,41 @@ After cleaning, several features were identified as non-essential due to high mi
 ---
 
 ## 4. Splitting into Train, Validation and Test set
-### 4.1 Stratification Mechanism
-For each year in the range:
-1. Calculate proportion of papers published that year
-2. Allocate train/val/test samples proportionally
-3. Randomly sample without replacement within each year
-4. Shuffle final splits to ensure randomness
+### 4.1 Overview of Splitting Strategy
+The dataset is split into train, validation, and test sets using a year-weighted, chronological approach to preserve temporal distribution and avoid bias. Only papers from 1971–2024 are considered, as earlier years have sparse data (<50 publications/year), and later years lack sufficient records.
+
+#### Key Steps:
+1. **Year Range Selection**: Filter papers to 1971–2024 based on publication density.
+2. **Weight Calculation**: Compute weights proportional to annual publication counts to maintain real-world distribution.
+3. **Chronological Assignment**: Divide years into contiguous blocks (train: earliest, validation: middle, test: latest), ensuring at least 10 years per set for representativeness.
+4. **Proportional Sampling**: For each year, sample papers proportionally to its weight, targeting 500,000 train, 150,000 validation, and 150,000 test papers.
+5. **Random Sampling & Shuffling**: Sample without replacement within years, then globally shuffle each set.
+6. **Connectivity Verification**: Analyze graph connectivity to ensure sets are well-linked internally.
+
+> In order to obtain an acceptable size of the biggest connected cluster, we tried different combinations of random seeds and minimum years sampled for set. We obtained the best result with `random_seed=21` and `min_years=10`, maybe we could obtain better result with higher `min_years`, but put more could _leave training data with obsolete data_, then we decided to maintain this. The training set has the largest cluster of connected nodes that cover ~67% of the entire set, validation has ~17% and test set ~20.
+
+This method prevents over-representation of sparse years and under-sampling of abundant ones, ensuring realistic temporal balance.
 
 **Example:**
-- If year 2020 has 2% of all papers $\rightarrow$ allocate 2% of train, val, test samples from 2020
+- If year 2000 has 2% of all papers $\rightarrow$ allocate 2% of train samples from 2000
 - Prevents early years (sparse data) from being over-represented
 - Prevents recent years (abundant data) from dominating
 
 ### 4.2 Final Split Sizes
+![global zear of publication distribution divided by sets](src/split_distr%20years.png)
+```
+global year range selected: from 1971 to 2014
+random seed: 21
+min number of years per set: 10
+```
 
-| Split | Target Size | Actual Size |
-|-------|-------------|-------------|
-| Train | 500,000 | 500,000 |
-| Validation | 100,000 | 100,000 |
-| Test | 100,000 | 100,000 |
+| Split | Years Covered | % of samples in biggest connected cluster | Target Size | Actual Size |
+|-------|-------------|-------------|-------------|-------------|
+| Train | 1971 - 2004 | 67.64% | 500,000 | 500,000 |
+| Validation | 2005 - 2014 | 17.00% | 150,000 | 150,000 |
+| Test | 2015 - 2024 | 19.66% | 150,000 | 150,000 |
 
+> The validation and test set has a smaller % of samples on the biggest connected cluster makes sense because they cover a smaller temporal range. Usually, to start to be cited, the paper should be published for some years in order to be known.
 ---
 
 ## 5. Remaining Data Characteristics & Considerations
