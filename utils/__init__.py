@@ -1,12 +1,15 @@
-<<<<<<< HEAD
-from .data import (
+from .textual_utils.data_processing.data_utils import (
+    balance_classes,
     build_positive_negative_pairs,
     build_training_dataframe,
     build_vector_text_columns,
     chunk_sequence,
     clean_references,
+    clean_citation_dataframe,
     extract_author_names,
     is_not_empty,
+    load_citation_dataframe,
+    load_citation_dataframe_from_files,
     load_clean_citation_dataframe,
     load_clean_citation_dataframe_from_files,
     load_parquet_files,
@@ -14,19 +17,18 @@ from .data import (
     normalize_text,
     resolve_chunk_paths,
 )
-from .feature_extractor import FeatureExtractor, build_classic_ml_matrix
+from .textual_utils.features.feature_extractor import FeatureExtractor, build_classic_ml_matrix
 
-# Keep the package importable on systems where torch or one of its native
-# Windows dependencies is unavailable. The notebook only needs the data and
-# TF-IDF utilities, so we expose the training helpers opportunistically.
+# Optional torch-dependent imports: keep lightweight utilities usable even when
+# torch or one of its Windows DLL dependencies is unavailable.
 try:
-    from .citation_dataset import BertCitationDataset, CitationDataset
+    from .textual_utils.data_processing.citation_dataset import BertCitationDataset, CitationDataset
 except (ImportError, OSError):
     BertCitationDataset = None
     CitationDataset = None
 
 try:
-    from .training import (
+    from .textual_utils.models.training import (
         PlotLossCallback,
         WeightedTrainer,
         build_bert_datasets,
@@ -61,6 +63,3 @@ except (ImportError, OSError):
     split_train_test = None
     split_dataset = None
     build_classification_report = None
-=======
-from .utils_graph import *
->>>>>>> graph_features

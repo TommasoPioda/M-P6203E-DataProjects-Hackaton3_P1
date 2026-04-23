@@ -137,7 +137,7 @@ def build_classic_ml_matrix(
     import pandas as pd
     import scipy.sparse as sp
 
-    from src.data.data_utils import build_vector_text_columns
+    from ..data_processing.data_utils import build_vector_text_columns
 
     working = build_vector_text_columns(df, include_authors=include_authors)
     y = working["is_reference_valid"].to_numpy()

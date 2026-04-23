@@ -1,7 +1,7 @@
 from pathlib import Path
 
-# __file__ is utils/config.py, parent is utils/, parent.parent is project root
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# __file__ is utils/textual_utils/config.py, parent is utils/textual_utils/, parent.parent.parent is project root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Define main directories
 DATA_DIR = PROJECT_ROOT / "data"

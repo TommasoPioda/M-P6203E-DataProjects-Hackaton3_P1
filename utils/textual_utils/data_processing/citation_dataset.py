@@ -5,8 +5,8 @@ from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 
-from src.data.data_utils import build_vector_text_columns
-from src.features.feature_extractor import FeatureExtractor
+from .data_utils import build_vector_text_columns
+from ..features.feature_extractor import FeatureExtractor
 
 
 class CitationDataset(Dataset):
