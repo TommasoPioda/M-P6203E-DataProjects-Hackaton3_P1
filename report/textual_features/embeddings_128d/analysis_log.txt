@@ -1,0 +1,57 @@
+=== Embedding evaluation log (2026-04-23T19:08:14) ===
+Embedding dimension: 128
+Analysis folder: C:\Users\Tommaso\Documents\MEGAR2D2\Documenti\SUPSI\BACHELOR\3_anno_bech\primaverile\a\M-P6203E-DataProjects-Hackaton3_P1\report\textual_features\embeddings_128d
+Plots folder: C:\Users\Tommaso\Documents\MEGAR2D2\Documenti\SUPSI\BACHELOR\3_anno_bech\primaverile\a\M-P6203E-DataProjects-Hackaton3_P1\report\textual_features\embeddings_128d\plots
+
+=== 1) BASIC CHECKS ===
+Full embedding dataframe shape: (2950135, 260)
+Evaluation sample size: 20000
+Split counts:
+split
+test           396380
+train         2162513
+validation     391242
+Article norm mean/std: 0.562837 / 0.114860
+Ref norm mean/std: 0.552972 / 0.126717
+
+=== 2) COSINE SIMILARITY STATISTICS ===
+Pair cosine mean/std/min/max: 0.230479 / 0.128049 / -0.204378 / 0.808513
+Pair cosine by label:
+                        mean       std       min       max
+is_reference_valid                                        
+0                   0.214443  0.125768 -0.195682  0.639177
+1                   0.246273  0.128325 -0.204378  0.808513
+
+=== 3) NEAREST NEIGHBORS (preview) ===
+        query_article_id             query_ref_id  query_label              nn_ref_id_1  nn_cos_1              nn_ref_id_2  nn_cos_2              nn_ref_id_3  nn_cos_3
+53e9af26b7602d97039610c9 53e9ad76b7602d970376501c            0 53e999f5b7602d970223e13c  0.412017 5390893e20f70186a0d93517  0.399141 53e99842b7602d970206cbc4  0.393431
+5390878720f70186a0d33fba 53909f8c20f70186a0e3f911            1 53e9ab0db7602d9703493e29  0.489843 60f90bdd5244ab9dcb328aa7  0.486300 5390a0b720f70186a0e4f2a2  0.477553
+53e9a987b7602d97032dee2c 53e99ce6b7602d970259e486            0 557f173b6fee0fe990caeb34  0.492637 5f12c85b9fced0a24b0c5088  0.469792 5390b36120f70186a0ef12e8  0.454719
+53e9b8aeb7602d970448c669 5390879220f70186a0d3c9bf            0 539089d220f70186a0d9a978  0.448277 539087eb20f70186a0d6a18f  0.415630 5f12c85b9fced0a24b0c5088  0.402599
+539089ab20f70186a0d94fee 53e9bb5ab7602d970479a8b3            0 5caea362e1cd8e2e06149e6e  0.624756 5390962020f70186a0df57dc  0.578978 599c7d23601a182cd28026ad  0.567647
+
+=== 4) PCA VISUALIZATION ===
+PCA explained variance (sum): 0.131100
+PCA plot saved to: C:\Users\Tommaso\Documents\MEGAR2D2\Documenti\SUPSI\BACHELOR\3_anno_bech\primaverile\a\M-P6203E-DataProjects-Hackaton3_P1\report\textual_features\embeddings_128d\plots\pca_projection_pairs.png
+
+=== 5) DOWNSTREAM CLASSIFICATION ===
+Downstream sample size: 120000
+Downstream ROC-AUC: 0.584732
+Classification report:
+              precision    recall  f1-score   support
+
+           0     0.5359    0.6460    0.5858     15790
+           1     0.5669    0.4530    0.5036     16151
+
+    accuracy                         0.5484     31941
+   macro avg     0.5514    0.5495    0.5447     31941
+weighted avg     0.5516    0.5484    0.5442     31941
+
+
+Embeddings dataset loaded from: C:\Users\Tommaso\Documents\MEGAR2D2\Documenti\SUPSI\BACHELOR\3_anno_bech\primaverile\a\M-P6203E-DataProjects-Hackaton3_P1\data\textual_features\textual_embeddings_128.parquet
+
+
+=== t-SNE ANALYSIS (2026-04-23T19:08:58) ===
+t-SNE sample size: 10000
+t-SNE KL divergence: 2.455494
+t-SNE plot saved to: C:\Users\Tommaso\Documents\MEGAR2D2\Documenti\SUPSI\BACHELOR\3_anno_bech\primaverile\a\M-P6203E-DataProjects-Hackaton3_P1\report\textual_features\embeddings_128d\plots\tsne_projection.png

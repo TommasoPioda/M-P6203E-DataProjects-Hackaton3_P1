@@ -3,16 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
 
-try:
-    from cuml.decomposition import TruncatedSVD
-    from cuml.feature_extraction.text import TfidfVectorizer
-    import cupy as cp
-    USE_GPU = True
-except ImportError:
-    from sklearn.decomposition import TruncatedSVD
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    USE_GPU = False
-    print("cuML non trovato. Fallback su CPU scikit-learn in corso.")
+# Use sklearn for stability with list inputs
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+USE_GPU = False
 
 
 @dataclass
@@ -39,7 +34,9 @@ class FeatureExtractor:
         self.ref_reducer: TruncatedSVD | None = None
 
     def fit(self, articles: list[str], refs: list[str]) -> None:
-        self.vectorizer.fit(list(articles) + list(refs))
+        # Combine articles and references into a single list for vocabulary fitting
+        combined = list(articles) + list(refs)
+        self.vectorizer.fit(combined)
 
     def transform(self, articles: list[str], refs: list[str]) -> tuple:
         tfidf_articles = self.vectorizer.transform(articles)
@@ -80,6 +77,7 @@ class FeatureExtractor:
 
         self.article_reducer = TruncatedSVD(n_components=n_components, random_state=random_state)
         self.ref_reducer = TruncatedSVD(n_components=n_components, random_state=random_state)
+        
         self.article_reducer.fit(tfidf_articles)
         self.ref_reducer.fit(tfidf_refs)
 
