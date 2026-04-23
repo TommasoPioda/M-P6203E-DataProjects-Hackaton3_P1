@@ -3,7 +3,7 @@ import networkx as nx
 import random
 
 
-def network_creation(df: pd.DataFrame) -> nx.DiGraph:
+def network_creation(df: pd.DataFrame, art_id: str, ref_id: str, validation: str) -> nx.DiGraph:
     """
     Create from from scratch the respective network graph given the dataframe
     
@@ -19,76 +19,24 @@ def network_creation(df: pd.DataFrame) -> nx.DiGraph:
         graph (nx.DiGraph): A directed graph object where nodes are paper IDs and 
         edges represent the citations.
     """
-    edges = []
-
-    # iterate over all the papers and save the connections
-    for _, row in df.iterrows():
-        paper = row["id"]
-        for ref in row["references"]:
-            edges.append((paper, ref))
-
-    # create the graph
-    graph = nx.DiGraph()
-    graph.add_edges_from(edges)
     
+    edges_df = df[df[validation]==1].copy()
+
+    # Create connections within the graph
+    graph = nx.from_pandas_edgelist(
+        edges_df,
+        source=art_id,
+        target=ref_id,
+        create_using=nx.DiGraph())
+    
+    all_nodes = pd.unique(df[[art_id, ref_id]].values.ravel())
+
+    graph.add_nodes_from(all_nodes)
+
     return graph
 
-def target_definition(graph: nx.DiGraph) -> pd.DataFrame:
-    """
-    Generate a new Dataframe containing pair of papers
-    with respective target labels
-    
-    This funtion save the edges that are present in the network and create
-    new unique pairs that have no reference at all between each others.
-    The method concatenates the two dataframe and assign the corresponding labels:
-    - 1 (connection)
-    - 0 (no connection)
-    
-    Args:
-        graph (nx.DiGraph): Direct graph that contain the papers as nodes
-            and citations as edges
-            
-    Returns:
-        concat_df (pd.DataFrame): Panda DataFrame containing:
-            - "node_a": Paper that cite
-            - "node_b": Cited paper
-            - "Target": define if paper A cite paper B
-                - 1 (paper A cite paper B)
-                - 0 (paper A doesn't cite paper B)
-    """
 
-    # list all the papers
-    nodes = list(graph.nodes())
-
-    # list all the papers that have at least one connection
-    pos_edges = list(graph.edges())
-
-    # create a set for papers that doesn't have any connection
-    neg_edges = set()
-
-    # generate unique pairs of papers that doesn't have any connection 
-    while len(neg_edges) < len(pos_edges):
-        node_a, node_b = random.sample(nodes, 2)
-        if not graph.has_edge(node_a, node_b):
-            neg_edges.add((node_a, node_b))
-            
-    neg_edges = list(neg_edges)
-    
-    # label papers with at least one connection as 1
-    pos = pd.DataFrame(pos_edges, columns=["node_a","node_b"])
-    pos["Target"] = 1
-
-    # label papers that doesn't have any connection as 0
-    neg = pd.DataFrame(neg_edges, columns=["node_a", "node_b"])
-    neg["Target"] = 0
-
-    # concatenate the two datasets of positive and negative connections
-    concat_df = pd.concat([pos, neg], ignore_index=True)
-    
-    return concat_df
-
-
-def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
+def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id: str) -> pd.DataFrame:
     """
     Generate new features based on the network and the
     corresponding dataframe, returning a panda DataFrame
@@ -112,19 +60,17 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
             - "Target": define if paper A cite paper B
                 - 1 (paper A cite paper B)
                 - 0 (paper A doesn't cite paper B)
-            - "in_a": In-degree of the paper A (number of citations received by paper A)
-            - "out_a": Out-degree of paper A (number of paper cited by A)
-            - "pagerank_a": Pagerank of paper A (importance of the paper A in the network)
-            - "eigen_cent_a": Eigenvector centrality of paper A (importance of the papers that cite paper A)
-            - "avg_neigh_degree_a": Average neighbor degree of paper A (average degree of the papers connected to paper A)
-            - "katz_cent_a":  Katz Centrality of paper A (Measure measures the influence of paper A by 
+            - "in_article": In-degree of the paper A (number of citations received by paper A)
+            - "out_article": Out-degree of paper A (number of paper cited by A)
+            - "pagerank_article": Pagerank of paper A (importance of the paper A in the network)
+            - "avg_neigh_degree_article": Average neighbor degree of paper A (average degree of the papers connected to paper A)
+            - "katz_cent_article":  Katz Centrality of paper A (Measure measures the influence of paper A by 
                 considering both direct and indirect connections)
-            - "in_b": In-degree of the paper B (number of citations received by paper B)
-            - "out_b": Out-degree of paper B (number of paper cited by B)
-            - "pagerank_b":Pagerank of paper B (importance of the paper B in the network)
-            - "eigen_cent_b": Eigenvector centrality of paper B (importance of the papers that cite paper B)
-            - "avg_neigh_degree_b": Average neighbor degree of paper B (average degree of the papers connected to paper B)
-            - "katz_cent_b":  Katz Centrality of paper B (Measure measures the influence of paper B by 
+            - "in_ref": In-degree of the paper B (number of citations received by paper B)
+            - "out_ref": Out-degree of paper B (number of paper cited by B)
+            - "pagerank_ref":Pagerank of paper B (importance of the paper B in the network)
+            - "eigen_cent_ref": Eigenvector centrality of paper B (importance of the papers that cite paper B)
+            - "katz_cent_ref":  Katz Centrality of paper B (Measure measures the influence of paper B by 
                 considering both direct and indirect connections)
             - "degree_ratio": Ratio between the out-degree of paper A and paper B
             - "pagerank_ratio": Ratio between Pagerank of paper A and Paper B
@@ -149,10 +95,6 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
     
     # Create a undirected copy of the graph
     graph_und = graph.to_undirected()
-
-    # Calculate the eigenvector centrality 
-    # of the graph
-    eigen_cent = nx.eigenvector_centrality(graph)
     
     # Calculate the average of the neighborhood
     # of each node
@@ -165,56 +107,48 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame) -> pd.DataFrame:
     # Compute the shortest-path betweenness 
     # centrality for nodes
     #betw_cent = nx.betweenness_centrality(graph, k=None, normalized=True)
-    
-    # Create a list of pairs of papers
-    pairs = list(zip(df_feats["node_a"], df_feats["node_b"]))
 
     # Add to the DataFrame the nodes
-    # features of node A
-    df_feats["in_a"] = df_feats["node_a"].map(in_degree)
-    df_feats["out_a"] = df_feats["node_a"].map(out_degree)
-    df_feats["pagerank_a"] = df_feats["node_a"].map(pagerank)
-    df_feats["eigen_cent_a"] = df_feats["node_a"].map(eigen_cent).fillna(0)
-    df_feats["avg_neigh_degree_a"] = df_feats["node_a"].map(avg_neigh_degree).fillna(0)
-    df_feats["katz_cent_a"] = df_feats["node_a"].map(katz_cent).fillna(0)
-    #df_feats["betw_cent_a"] = df_feats["node_a"].map(betw_cent).fillna(0)
-        
-    # Add to the DataFrame the nodes
-    # features of node B
-    df_feats["in_b"] = df_feats["node_b"].map(in_degree)
-    df_feats["out_b"] = df_feats["node_b"].map(out_degree)
-    df_feats["pagerank_b"] = df_feats["node_b"].map(pagerank)
-    df_feats["eigen_cent_b"] = df_feats["node_b"].map(eigen_cent).fillna(0)
-    df_feats["avg_neigh_degree_b"] = df_feats["node_b"].map(avg_neigh_degree).fillna(0)
-    df_feats["katz_cent_b"] = df_feats["node_b"].map(katz_cent).fillna(0)
-    #df_feats["betw_cent_b"] = df_feats["node_b"].map(betw_cent).fillna(0)
+    # features of node A and B
+    nodes_names = {
+        art_id:"article",
+        ref_id:"ref"
+        }
+
+    for col, name in nodes_names.items():
+        df_feats[f"in_{name}"] = df_feats[col].map(in_degree).fillna(0)
+        df_feats[f"out_{name}"] = df_feats[col].map(out_degree).fillna(0)
+        df_feats[f"pagerank_{name}"] = df_feats[col].map(pagerank).fillna(0)
+        df_feats[f"avg_neigh_degree_{name}"] = df_feats[col].map(avg_neigh_degree).fillna(0)
+        df_feats[f"katz_cent_{name}"] = df_feats[col].map(katz_cent).fillna(0)
+        #df_feats[f"betw_cent_a"] = df_feats["node_a"].map(betw_cent).fillna(0)
     
     # Compute and append to the DataFrame...
     # ...the ratio of papers that the two paper cite
-    df_feats["degree_ratio"] = df_feats["out_a"] / (df_feats["out_b"] + 1)
+    df_feats["degree_ratio"] = df_feats[f"out_{nodes_names[art_id]}"] / (df_feats[f"out_{nodes_names[ref_id]}"] + 1)
     
     # ...the prestige ratio
-    df_feats["pagerank_ratio"] = df_feats["pagerank_a"] / (df_feats["pagerank_b"] + 1e-9)
+    df_feats["pagerank_ratio"] = df_feats[f"pagerank_{nodes_names[art_id]}"] / (df_feats[f"pagerank_{nodes_names[ref_id]}"] + 1e-9)
     
     # ...the prestige product
-    df_feats["pagerank_prod"] = df_feats["pagerank_a"] * df_feats["pagerank_b"]
+    df_feats["pagerank_prod"] = df_feats[f"pagerank_{nodes_names[art_id]}"] * df_feats[f"pagerank_{nodes_names[ref_id]}"]
+    
+    # Create a list of pairs of papers
+    pairs = list(zip(df_feats[art_id], df_feats[ref_id]))
     
     # ...the number of common neighbors
     df_feats["common_neighbors"] = [
-    len(list(nx.common_neighbors(graph_und, u, v)))
-    for u, v in pairs
-    ]
+        len(list(nx.common_neighbors(graph_und, u, v)))
+        if (u in graph_und and v in graph_und) else 0
+        for u, v in pairs
+        ]
     
     # ...the Jaccard coefficient
-    jaccard_scores = {
-    (u, v): score
-    for u, v, score in nx.jaccard_coefficient(graph_und, pairs)
-    }
+    jaccard_scores = nx.jaccard_coefficient(graph_und, pairs)    
     
     df_feats["jaccard_coeff"] = [
-        jaccard_scores.get((u, v), 0)
-        for u, v in pairs
-    ]
+        score for u, v, score in jaccard_scores
+        ]
 
     return df_feats
 
