@@ -36,7 +36,7 @@ if not (PROJECT_ROOT / "utils").exists():
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data.data_utils import (
+from .data_utils import (
     build_training_dataframe,
     load_clean_citation_dataframe_from_files,
 )

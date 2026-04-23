@@ -13,8 +13,8 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset, random_split
 from transformers import Trainer, TrainerCallback, TrainingArguments
 
-from src.data.citation_dataset import BertCitationDataset
-from src.features.feature_extractor import build_classic_ml_matrix
+from ..data_processing.citation_dataset import BertCitationDataset
+from ..features.feature_extractor import build_classic_ml_matrix
 
 
 def get_device() -> torch.device:

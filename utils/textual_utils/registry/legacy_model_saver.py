@@ -8,7 +8,7 @@ from typing import Any
 
 import joblib
 
-from src.config import PROJECT_ROOT
+from ..config import PROJECT_ROOT
 
 
 def _slug(value: str) -> str:
@@ -63,7 +63,8 @@ def _model_split_dir(
     root: Path | None = None,
 ) -> Path:
     base_dir = root or (PROJECT_ROOT / "Models")
-    # Keep folder names informative but short enough for Windows path limits.
+    if root is not None:
+        return base_dir / model_family / model_name / split_name
     return base_dir / df_name / model_family / model_name / split_name
 
 
@@ -100,9 +101,23 @@ def save_model_artifact(
     timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     model_slug = _slug(model_name)[:16]
 
+    def _resolved_length(path: Path) -> int:
+        try:
+            return len(str(path.resolve()))
+        except Exception:
+            return len(str(path.absolute()))
+
     is_transformer = hasattr(model, "save_pretrained")
     if is_transformer:
         model_path = artifact_dir / f"{model_slug}__{params_compact}__{params_hash}"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / f"{model_slug}__{params_hash}"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / f"{model_slug}__{params_hash[:8]}"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / model_slug
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / params_hash[:8]
         if model_path.exists() and force:
             for child in model_path.glob("**/*"):
                 if child.is_file():
@@ -113,9 +128,14 @@ def save_model_artifact(
             tokenizer.save_pretrained(model_path)
     else:
         model_path = artifact_dir / f"{model_slug}__{params_compact}__{params_hash}.joblib"
-        # Additional safety net for Windows path length: fallback to a shorter filename.
-        if len(str(model_path)) > 240:
+        if _resolved_length(model_path) > 240:
             model_path = artifact_dir / f"{model_slug}__{params_hash}.joblib"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / f"{model_slug}__{params_hash[:8]}.joblib"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / f"{model_slug}.joblib"
+        if _resolved_length(model_path) > 240:
+            model_path = artifact_dir / f"{params_hash[:8]}.joblib"
         if (not model_path.exists()) or force:
             joblib.dump(model, model_path)
 
