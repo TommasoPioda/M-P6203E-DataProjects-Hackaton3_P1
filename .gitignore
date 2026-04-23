@@ -4,6 +4,7 @@ vendor/
 Data/
 data/
 DBLP-Citation-network-V18*
+models_checkpoints/
 
 # Logs
 logs/
@@ -51,4 +52,17 @@ coverage/
 tmp/
 temp/
 *.tmp
+
+
+# Model artifacts: ignore saved model files and generated metadata under Models/
+# - .joblib files (sklearn/runtime dumps)
+Models/**/*.joblib
+# - optional runtime alias
+Models/**/__runtime.joblib
+# - summary/metadata written by save_model_artifact
+Models/**/summary__*.json
+# - cross-validation results exported by save_model_artifact
+Models/**/cv_results__*.csv
+# - transformer-style saved-model directories named like "<slug>__<compact>__<hash>/"
+Models/**/*__*__*/
 
