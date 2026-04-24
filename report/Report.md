@@ -307,6 +307,37 @@ min number of years per set: 10
 
 ## 6. Feature Engineering
 
+### 6.3 Graph Feature
+
+**Network Construction**
+
+- The network is built as a directed graph where each edge represents a validated citation (`Target = 1`) pointing from the citing article to the referred paper.
+- To ensure data consistency and prevent `NodeNotFound` errors during inference, all papers present in the dataset—including isolated nodes without active citations—have been explicitly added to the graph.
+
+**Feature Categorization**
+
+The extracted graph features are divided into three main categories based on their structural depth:
+
+- `Node Features (Individual Importance)`: These describe the role and authority of each individual article within the network:
+    * **in_***: *In-degree*; the number of citations received (a measure of popularity/prestige).
+    * **out_***: *Out-degree*; the number of references made (a measure of bibliographic breadth).
+    * **pagerank_***: A centrality score defining the relative importance of the paper based on the quality of its incoming citations.
+    * **avg_neigh_degree_***: The average degree of a node's neighbors, helping to identify nodes connected to major hubs or isolated clusters.
+    * **katz_cent_***: An influence measure that considers both direct and long-range indirect connections.
+
+- `Neighborhood Features (Local Context)`: These analyze the local overlap between the article and the reference:
+    * **common_neighbors**: The absolute count of shared neighbors in the undirected version of the graph, indicating a common scientific foundation.
+
+
+
+- `Relational Features (Pairwise Interaction)`: These capture the hierarchical dynamics and specific structural similarity between the pair of nodes:
+    * **degree_ratio**: The ratio between the out-degree of the article and the reference, used to balance the activity levels of the two nodes.
+    * **pagerank_ratio**: The disparity in importance between the article and the reference; it identifies typical patterns, such as new papers citing "classics."
+    * **pagerank_prod**: The product of the importance of both nodes, highlighting connections between two pillar nodes of the network.
+    * **jaccard_coeff**: A structural similarity coefficient that normalizes the number of shared neighbors relative to the total size of their combined neighborhoods:
+
+$$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
+
 ## 7. Models
 
 ## 8. Comparison
