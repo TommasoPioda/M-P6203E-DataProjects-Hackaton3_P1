@@ -1,1 +1,0 @@
-TEXTUAL_EMBEDDINGS_PATH = '../../../data/textual_features/'
