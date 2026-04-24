@@ -54,8 +54,8 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id
                 
     Returns:
         df_feats (pd.DataFrame): Panda DataFrame containing:
-            - "node_a": Paper that cite
-            - "node_b": Cited paper
+            - "article_id": Paper that cite
+            - "ref_id": Cited paper
             - "Target": define if paper A cite paper B
                 - 1 (paper A cite paper B)
                 - 0 (paper A doesn't cite paper B)
@@ -63,13 +63,13 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id
             - "out_article": Out-degree of paper A (number of paper cited by A)
             - "pagerank_article": Pagerank of paper A (importance of the paper A in the network)
             - "avg_neigh_degree_article": Average neighbor degree of paper A (average degree of the papers connected to paper A)
-            - "katz_cent_article":  Katz Centrality of paper A (Measure measures the influence of paper A by 
+            - "katz_cent_article":  Katz Centrality of paper A (Measure the influence of paper A by 
                 considering both direct and indirect connections)
             - "in_ref": In-degree of the paper B (number of citations received by paper B)
             - "out_ref": Out-degree of paper B (number of paper cited by B)
             - "pagerank_ref":Pagerank of paper B (importance of the paper B in the network)
             - "eigen_cent_ref": Eigenvector centrality of paper B (importance of the papers that cite paper B)
-            - "katz_cent_ref":  Katz Centrality of paper B (Measure measures the influence of paper B by 
+            - "katz_cent_ref":  Katz Centrality of paper B (Measure the influence of paper B by 
                 considering both direct and indirect connections)
             - "degree_ratio": Ratio between the out-degree of paper A and paper B
             - "pagerank_ratio": Ratio between Pagerank of paper A and Paper B
