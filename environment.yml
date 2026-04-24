@@ -12,6 +12,8 @@ dependencies:
   - scikit-learn
   - pyarrow
   - tqdm
+  - shap
+  - lime
   - pip:
       - torch
       - torchvision
