@@ -1,6 +1,5 @@
 import pandas as pd
 import networkx as nx
-import random
 
 
 def network_creation(df: pd.DataFrame, art_id: str, ref_id: str, validation: str) -> nx.DiGraph:

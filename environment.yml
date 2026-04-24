@@ -1,6 +1,7 @@
 name: hack_03
 channels:
   - conda-forge
+  - pytorch
 dependencies:
   - python=3.11
   - ipykernel
@@ -12,6 +13,10 @@ dependencies:
   - scikit-learn
   - pyarrow
   - tqdm
+  - xgboost
+  - networkx
+  - joblib
+  - pip
   - pip:
       - torch
       - torchvision
