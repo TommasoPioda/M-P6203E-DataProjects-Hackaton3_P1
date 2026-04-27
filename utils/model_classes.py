@@ -194,7 +194,8 @@ class KNNModel(BaseModel):
         :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
         :param is_training: If True, fits the scaler. If False, only transforms.
         """
-        print(f"[{self.model_name}] Preprocessing data...")
+        if verbose: 
+            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
 
         # 1. drop columns that are not features (handling names based on your notebook)
         drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
@@ -293,7 +294,8 @@ class XGBModel(BaseModel):
         :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
         :param is_training: If True, fits the scaler. If False, only transforms.
         """
-        print(f"[{self.model_name}] Preprocessing data...")
+        if verbose: 
+            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
 
         # 1. drop columns that are not features (handling names based on your notebook)
         drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
@@ -376,22 +378,29 @@ class LGBModel(BaseModel):
         self.scaler = RobustScaler()
 
     def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose=True) -> tuple:
+        """
+        Prepares features by concatenating article and reference embeddings.
+        :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
+        :param is_training: If True, fits the scaler. If False, only transforms.
+        """
         if verbose:
             print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
 
-        drop_cols = ["is_reference_valid", "article_id", "ref_id", 
-                     "vector_text_article", "vector_text_ref", "split"]
+        # 1. drop useless columns
+        drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
         
         X = data.drop(columns=drop_cols, errors="ignore").copy()
         y = data["is_reference_valid"].copy()
 
-        # Scaling is generally less critical for LGBM but RobustScaler handles potential embedding outliers well
+        # 2. Scaling is generally less critical for LGBM but RobustScaler handles potential embedding outliers well
         if is_training:
             X_scaled = self.scaler.fit_transform(X)
         else:
             X_scaled = self.scaler.transform(X)
             
-        return X_scaled, y
+        X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+
+        return X_scaled_df, y
 
     def grid_search(self, df_train, df_val, param_grid, n_iter=15, n_jobs=N_JOBS, **kwargs):
         """
