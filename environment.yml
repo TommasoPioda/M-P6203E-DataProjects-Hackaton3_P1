@@ -3,6 +3,7 @@ channels:
   # - intel
   - conda-forge
   - pytorch
+  - nvidia
   - defaults
 dependencies:
   - python=3.11
@@ -20,9 +21,10 @@ dependencies:
   - joblib
   - nomkl
   - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.4
   - pip:
-      - torch
-      - torchvision
-      - torchaudio
       - sentence-transformers
       - transformers

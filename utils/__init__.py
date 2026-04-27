@@ -18,6 +18,23 @@ from .textual_utils.data_processing.data_utils import (
     resolve_chunk_paths,
 )
 from .textual_utils.features.feature_extractor import FeatureExtractor, build_classic_ml_matrix
+from .embedding_transformer_utils import (
+    df_type_from_name,
+    find_project_root,
+    get_torch_device,
+    load_pair_embedding_transformer_model,
+    sample_dataframe,
+    set_torch_seed,
+    slug,
+)
+
+try:
+    from .model_classes import BaseModel, KNNModel, PairEmbeddingTransformer, PairEmbeddingTransformerModel
+except (ImportError, OSError):
+    BaseModel = None
+    KNNModel = None
+    PairEmbeddingTransformer = None
+    PairEmbeddingTransformerModel = None
 
 # Optional torch-dependent imports: keep lightweight utilities usable even when
 # torch or one of its Windows DLL dependencies is unavailable.

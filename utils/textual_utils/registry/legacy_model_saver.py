@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -18,54 +17,17 @@ def _slug(value: str) -> str:
     return cleaned.strip("_") or "default"
 
 
-def _params_hash(obj: Any) -> str:
-    try:
-        if hasattr(obj, "get_params"):
-            params = obj.get_params()
-        elif hasattr(obj, "config") and hasattr(obj.config, "to_dict"):
-            params = obj.config.to_dict()
-        else:
-            params = obj.__dict__
-        encoded = json.dumps(params, sort_keys=True, default=str)
-    except Exception:
-        encoded = repr(obj)
-    return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:12]
-
-
-def _artifact_dir(feature_set: str, experiment_name: str, root: Path | None = None) -> Path:
-    base_dir = root or (PROJECT_ROOT / "models")
-    return base_dir / _slug(feature_set) / _slug(experiment_name)
-
-
-def _compact_params(params: dict[str, Any] | None, max_items: int = 4, max_key_len: int = 10, max_val_len: int = 12) -> str:
-    if not params:
-        return "default"
-    parts: list[str] = []
-    for key in sorted(params.keys())[:max_items]:
-        value = params[key]
-        if isinstance(value, float):
-            rendered = f"{value:.4g}"
-        else:
-            rendered = str(value)
-        key_slug = _slug(str(key))[:max_key_len]
-        val_slug = _slug(rendered)[:max_val_len]
-        parts.append(f"{key_slug}-{val_slug}")
-    compact = "__".join(parts) or "default"
-    return compact[:80]
-
-
-def _model_split_dir(
-    *,
-    df_name: str,
-    model_family: str,
-    model_name: str,
-    split_name: str,
-    root: Path | None = None,
-) -> Path:
-    base_dir = root or (PROJECT_ROOT / "Models")
-    if root is not None:
-        return base_dir / model_family / model_name / split_name
-    return base_dir / df_name / model_family / model_name / split_name
+def _df_type_from_name(df_name: str) -> str:
+    value = _slug(df_name)
+    if any(token in value for token in ("embedding", "textual")):
+        return "embeddings"
+    if "graph" in value:
+        return "graph_based"
+    if any(token in value for token in ("mix", "mixed", "hybrid")):
+        return "mix"
+    if any(token in value for token in ("normal", "classic", "raw", "exploded")):
+        return "normal"
+    return value or "normal"
 
 
 def save_model_artifact(
@@ -82,62 +44,37 @@ def save_model_artifact(
     force: bool = False,
     root: Path | None = None,
 ) -> tuple[Path, Path]:
-    """Save model artifacts under models/<df>/<family>/<model>/<split>.
+    """Save model artifacts under Models/<df_type>/<model_name>.
 
     Returns a tuple: (model_artifact_path, metadata_json_path).
     """
-    artifact_dir = _model_split_dir(
-        df_name=df_name,
-        model_family=model_family,
-        model_name=model_name,
-        split_name=split_name,
-        root=root,
-    )
+    params = params or {}
+    summary = summary or {}
+
+    df_type = _df_type_from_name(df_name)
+    model_slug = _slug(model_name)
+    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    saved_name = f"{model_slug}__{timestamp}"
+
+    base_dir = root or (PROJECT_ROOT / "Models")
+    artifact_dir = base_dir / df_type / model_slug
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    params = params or {}
-    params_compact = _compact_params(params)
-    params_hash = _params_hash(params)
-    timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
-    model_slug = _slug(model_name)[:16]
-
-    def _resolved_length(path: Path) -> int:
-        try:
-            return len(str(path.resolve()))
-        except Exception:
-            return len(str(path.absolute()))
-
     is_transformer = hasattr(model, "save_pretrained")
+
     if is_transformer:
-        model_path = artifact_dir / f"{model_slug}__{params_compact}__{params_hash}"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{model_slug}__{params_hash}"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{model_slug}__{params_hash[:8]}"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / model_slug
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / params_hash[:8]
-        if model_path.exists() and force:
-            for child in model_path.glob("**/*"):
-                if child.is_file():
-                    child.unlink(missing_ok=True)
+        model_path = artifact_dir / saved_name
+        if model_path.exists() and not force:
+            raise FileExistsError(f"Model already exists: {model_path}")
         model_path.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(model_path)
         if tokenizer is not None and hasattr(tokenizer, "save_pretrained"):
             tokenizer.save_pretrained(model_path)
     else:
-        model_path = artifact_dir / f"{model_slug}__{params_compact}__{params_hash}.joblib"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{model_slug}__{params_hash}.joblib"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{model_slug}__{params_hash[:8]}.joblib"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{model_slug}.joblib"
-        if _resolved_length(model_path) > 240:
-            model_path = artifact_dir / f"{params_hash[:8]}.joblib"
-        if (not model_path.exists()) or force:
-            joblib.dump(model, model_path)
+        model_path = artifact_dir / f"{saved_name}.joblib"
+        if model_path.exists() and not force:
+            raise FileExistsError(f"Model already exists: {model_path}")
+        joblib.dump(model, model_path)
 
     cv_results_path: Path | None = None
     if cv_results is not None:
@@ -145,29 +82,28 @@ def save_model_artifact(
             import pandas as pd  # local import to avoid hard dependency during module import
 
             cv_df = pd.DataFrame(cv_results)
-            cv_results_path = artifact_dir / f"cv_results__{model_slug}__{timestamp}.csv"
+            cv_results_path = artifact_dir / f"{saved_name}__cv_results.csv"
             cv_df.to_csv(cv_results_path, index=False)
         except Exception:
             cv_results_path = None
 
     payload: dict[str, Any] = {
         "timestamp": timestamp,
+        "df_type": df_type,
         "df_name": df_name,
         "model_family": model_family,
         "model_name": model_name,
         "split_name": split_name,
         "params": params,
-        "params_hash": params_hash,
         "model_path": str(model_path),
+        "performance": summary,
     }
     if cv_results_path is not None:
         payload["cv_results_path"] = str(cv_results_path)
-    if summary:
-        payload.update(summary)
 
-    metadata_path = artifact_dir / f"summary__{model_slug}__{timestamp}.json"
+    metadata_path = artifact_dir / f"{saved_name}.json"
     with open(metadata_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
+        json.dump(payload, handle, indent=2, default=str)
 
     return model_path, metadata_path
 
@@ -185,11 +121,7 @@ def save_sklearn_model(
     runtime_copy: bool = False,
     root: Path | None = None,
 ) -> Path:
-    """Save a scikit-learn style estimator under a feature-aware folder.
-
-    The saved path becomes models/<feature_set>/<experiment_name>/... so textual and
-    non-textual feature runs remain separated.
-    """
+    """Save a scikit-learn style estimator with the shared artifact layout."""
     estimator_name = model_name or estimator.__class__.__name__
     model_path, _ = save_model_artifact(
         estimator,
@@ -256,11 +188,7 @@ def save_transformer_model(
     force: bool = False,
     root: Path | None = None,
 ) -> Path:
-    """Save a Hugging Face style transformer model in a feature-aware folder.
-
-    The model is saved into a stable "latest" directory for the experiment so repeated
-    runs overwrite the same artifact instead of accumulating duplicates.
-    """
+    """Save a Hugging Face style transformer model with the shared artifact layout."""
     if not hasattr(model, "save_pretrained"):
         raise TypeError("save_transformer_model expects a Hugging Face style model with save_pretrained().")
 

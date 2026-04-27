@@ -12,6 +12,7 @@ utils/exploring.py
 utils/feature_selection.py
 utils/graph_features.py
 utils/loader_class.py
+utils/model_classes.py
 utils/model_saver.py
 utils/splitting.py
 utils/textual_utils/__init__.py

@@ -8,15 +8,15 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3.11
-Requires-Dist: ipykernel
-Requires-Dist: jupyter
-Requires-Dist: matplotlib
 Requires-Dist: numpy
 Requires-Dist: pandas
+Requires-Dist: matplotlib
 Requires-Dist: seaborn
 Requires-Dist: scikit-learn
 Requires-Dist: pyarrow
 Requires-Dist: tqdm
+Requires-Dist: networkx
+Requires-Dist: xgboost
 Requires-Dist: torch
 Requires-Dist: torchvision
 Requires-Dist: torchaudio

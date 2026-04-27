@@ -1,12 +1,30 @@
 from abc import ABC, abstractmethod
 
+import json
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
 from utils.model_saver import save_model_artifact
 from sklearn.preprocessing import StandardScaler
+from tqdm.auto import tqdm
+
+from utils.embedding_transformer_utils import df_type_from_name, get_torch_device, slug
+from utils.textual_utils.config import PROJECT_ROOT
+
+try:
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import DataLoader, TensorDataset
+    _TORCH_IMPORT_ERROR = None
+except (ImportError, OSError) as exc:
+    torch = None
+    nn = None
+    DataLoader = None
+    TensorDataset = None
+    _TORCH_IMPORT_ERROR = exc
 
 class BaseModel(ABC):
     """
@@ -58,7 +76,7 @@ class BaseModel(ABC):
         disp.plot(cmap="Blues")
 
 
-    def train_pipeline(self, raw_train, **kwargs):
+    def train_pipeline(self, raw_train, frac=0.01, **kwargs):
         """
         Complete pipeline for train:
         - preprocess for training
@@ -68,8 +86,16 @@ class BaseModel(ABC):
         """
         X_tr, y_tr = self.preprocess(raw_train, is_training=True, **kwargs)
         self.train(X_tr, y_tr)
-        y_pred = self.predict(X_tr)
-        self.evaluate(y_tr, y_pred)
+
+        import numpy as np
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(X_tr), size=int(len(X_tr) * frac), replace=False)
+
+        X_sample = X_tr[idx]
+        y_sample = y_tr[idx]
+
+        y_pred = self.predict(X_sample)
+        self.evaluate(y_sample, y_pred)
 
     def test_pipeline(self, raw_test, **kwargs):
         """
@@ -150,5 +176,358 @@ class KNNModel(BaseModel):
         Get probability scores (useful for AUC calculation).
         """
         return self.model.predict_proba(X)
+
+
+class PairEmbeddingTransformer(nn.Module if nn is not None else object):
+    """
+    Lightweight Transformer encoder for article/reference embedding pairs.
+
+    Input shape: [batch, 2, 128]
+    - token 0: article embedding
+    - token 1: reference embedding
+    """
+    def __init__(
+        self,
+        embedding_dim: int = 128,
+        d_model: int = 128,
+        nhead: int = 8,
+        num_layers: int = 2,
+        dim_feedforward: int = 256,
+        dropout: float = 0.15,
+    ):
+        if nn is None:
+            raise OSError(f"PyTorch is required for PairEmbeddingTransformer: {_TORCH_IMPORT_ERROR}")
+        super().__init__()
+        self.input_projection = nn.Linear(embedding_dim, d_model)
+        self.type_embedding = nn.Parameter(torch.zeros(1, 2, d_model))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, d_model))
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            activation="gelu",
+            batch_first=True,
+            norm_first=True,
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.norm = nn.LayerNorm(d_model)
+        self.classifier = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(d_model, d_model // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model // 2, 1),
+        )
+
+        nn.init.normal_(self.type_embedding, mean=0.0, std=0.02)
+        nn.init.normal_(self.cls_token, mean=0.0, std=0.02)
+
+    def forward(self, X):
+        X = self.input_projection(X) + self.type_embedding
+        cls = self.cls_token.expand(X.size(0), -1, -1)
+        X = torch.cat([cls, X], dim=1)
+        X = self.encoder(X)
+        cls_output = self.norm(X[:, 0])
+        return self.classifier(cls_output).squeeze(-1)
+
+
+class PairEmbeddingTransformerModel(BaseModel):
+    """
+    Transformer model wrapper that follows the same pipeline shape as KNNModel.
+
+    The class owns:
+    - preprocessing and scaling
+    - training loop
+    - prediction and probability output
+    - evaluation
+    - checkpoint saving
+    """
+    def __init__(self, model_name: str = "pair_embedding_transformer_128", device=None, **model_params):
+        if torch is None or nn is None:
+            raise OSError(f"PyTorch is required for PairEmbeddingTransformerModel: {_TORCH_IMPORT_ERROR}")
+        self.model_params = {
+            "embedding_dim": 128,
+            "d_model": 128,
+            "nhead": 16,
+            "num_layers": 4,
+            "dim_feedforward": 256,
+            "dropout": 0.15,
+        }
+        self.model_params.update(model_params)
+        self.device = device or get_torch_device()
+        transformer = PairEmbeddingTransformer(**self.model_params).to(self.device)
+        super().__init__(model_name=model_name, model=transformer)
+
+        self.scaler = StandardScaler()
+        self.article_cols: list[str] | None = None
+        self.ref_cols: list[str] | None = None
+        self.history: list[dict] = []
+        self.threshold = 0.5
+        self.last_metrics: dict = {}
+
+    def _ensure_embedding_columns(self, data: pd.DataFrame) -> None:
+        if self.article_cols is None:
+            self.article_cols = sorted([col for col in data.columns if col.startswith("article_emb_")])
+        if self.ref_cols is None:
+            self.ref_cols = sorted([col for col in data.columns if col.startswith("ref_emb_")])
+        if len(self.article_cols) != 128 or len(self.ref_cols) != 128:
+            raise ValueError(
+                f"Expected 128 article/ref embedding columns, found "
+                f"{len(self.article_cols)} and {len(self.ref_cols)}"
+            )
+
+    def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose: bool = True) -> tuple:
+        """
+        Prepare embedding pairs as [n_rows, 2, 128].
+
+        The scaler is fit only on training data and reused for validation/test,
+        matching the behavior of KNNModel.
+        """
+        print(f"[{self.model_name}] Preprocessing data...")
+        self._ensure_embedding_columns(data)
+
+        article = data[self.article_cols].to_numpy(dtype=np.float32)
+        reference = data[self.ref_cols].to_numpy(dtype=np.float32)
+        flat_features = np.concatenate([article, reference], axis=1)
+        y = data["is_reference_valid"].to_numpy(dtype=np.float32)
+
+        if is_training:
+            flat_features = self.scaler.fit_transform(flat_features)
+        else:
+            flat_features = self.scaler.transform(flat_features)
+
+        X = flat_features.astype(np.float32).reshape(-1, 2, 128)
+
+        if verbose:
+            print("Label distribution:")
+            print(pd.Series(y).value_counts(normalize=True))
+
+        return X, y
+
+    def _make_loader(self, X, y=None, batch_size: int = 512, shuffle: bool = False):
+        X_tensor = torch.tensor(X, dtype=torch.float32)
+        if y is None:
+            dataset = TensorDataset(X_tensor)
+        else:
+            y_tensor = torch.tensor(y, dtype=torch.float32)
+            dataset = TensorDataset(X_tensor, y_tensor)
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=0,
+            pin_memory=self.device.type == "cuda",
+        )
+
+    def _compute_pos_weight(self, y):
+        y_array = np.asarray(y, dtype=np.float32)
+        num_pos = float(y_array.sum())
+        num_neg = float(len(y_array) - num_pos)
+        return torch.tensor(num_neg / max(num_pos, 1.0), dtype=torch.float32, device=self.device)
+
+    def train(
+        self,
+        X_train,
+        y_train,
+        X_val=None,
+        y_val=None,
+        epochs: int = 5,
+        batch_size: int = 512,
+        learning_rate: float = 1e-4,
+        weight_decay: float = 1e-4,
+        patience: int = 2,
+        **kwargs,
+    ):
+        """
+        Train the PyTorch transformer.
+
+        Validation is optional. When provided, the best checkpoint is selected
+        by weighted F1 score.
+        """
+        print(f"[{self.model_name}] Starting training...")
+        train_loader = self._make_loader(X_train, y_train, batch_size=batch_size, shuffle=True)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=self._compute_pos_weight(y_train))
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+
+        best_val_f1 = -np.inf
+        best_state = None
+        epochs_without_improvement = 0
+        self.history = []
+
+        for epoch in range(1, epochs + 1):
+            self.model.train()
+            total_loss = 0.0
+
+            for X_batch, y_batch in tqdm(train_loader, desc=f"epoch {epoch} train", leave=False):
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                y_batch = y_batch.to(self.device, non_blocking=True)
+
+                optimizer.zero_grad(set_to_none=True)
+                logits = self.model(X_batch)
+                loss = criterion(logits, y_batch)
+                loss.backward()
+                optimizer.step()
+
+                total_loss += loss.item() * X_batch.size(0)
+
+            row = {"epoch": epoch, "train_loss": float(total_loss / len(train_loader.dataset))}
+
+            if X_val is not None and y_val is not None:
+                val_prob = self.predict_proba(X_val, batch_size=batch_size)
+                val_pred = (val_prob >= self.threshold).astype(int)
+                val_f1 = f1_score(np.asarray(y_val).astype(int), val_pred, average="weighted")
+                row["val_f1_weighted"] = float(val_f1)
+
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    best_state = {key: value.detach().cpu().clone() for key, value in self.model.state_dict().items()}
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
+
+            self.history.append(row)
+            print(row)
+
+            if X_val is not None and y_val is not None and epochs_without_improvement >= patience:
+                print(f"Early stopping at epoch {epoch}")
+                break
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+
+    def predict_proba(self, X, batch_size: int = 512):
+        """
+        Return positive-class probabilities.
+        """
+        self.model.eval()
+        loader = self._make_loader(X, batch_size=batch_size, shuffle=False)
+        probabilities = []
+        with torch.no_grad():
+            for (X_batch,) in tqdm(loader, desc="predict", leave=False):
+                X_batch = X_batch.to(self.device, non_blocking=True)
+                logits = self.model(X_batch)
+                probabilities.append(torch.sigmoid(logits).cpu().numpy())
+        return np.concatenate(probabilities)
+
+    def predict(self, X, batch_size: int = 512):
+        return (self.predict_proba(X, batch_size=batch_size) >= self.threshold).astype(int)
+
+    def evaluate(self, y_true, y_pred, title: str | None = None):
+        """
+        Print classification metrics and plot a confusion matrix.
+        """
+        y_true = np.asarray(y_true).astype(int)
+        y_pred = np.asarray(y_pred).astype(int)
+
+        report = classification_report(y_true, y_pred, digits=4, output_dict=True)
+        print(classification_report(y_true, y_pred, digits=4))
+
+        cm = confusion_matrix(y_true, y_pred)
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+        disp.plot(cmap="Blues")
+        if title:
+            import matplotlib.pyplot as plt
+
+            plt.title(title)
+            plt.show()
+
+        metrics = {
+            "accuracy": float(report["accuracy"]),
+            "f1_weighted": float(report["weighted avg"]["f1-score"]),
+            "precision_weighted": float(report["weighted avg"]["precision"]),
+            "recall_weighted": float(report["weighted avg"]["recall"]),
+        }
+        self.last_metrics = metrics
+        return metrics
+
+    def train_pipeline(self, raw_train, raw_val=None, **kwargs):
+        """
+        Complete train pipeline:
+        - preprocess train
+        - preprocess validation with train scaler
+        - fit transformer
+        - evaluate on train
+        """
+        verbose = kwargs.pop("verbose", True)
+        X_tr, y_tr = self.preprocess(raw_train, is_training=True, verbose=verbose)
+        if raw_val is not None:
+            X_val, y_val = self.preprocess(raw_val, is_training=False, verbose=False)
+        else:
+            X_val, y_val = None, None
+
+        self.train(X_tr, y_tr, X_val=X_val, y_val=y_val, **kwargs)
+        y_pred = self.predict(X_tr, batch_size=kwargs.get("batch_size", 512))
+        return self.evaluate(y_tr, y_pred, title=f"{self.model_name} - Train confusion matrix")
+
+    def test_pipeline(self, raw_test, batch_size: int = 512, **kwargs):
+        """
+        Complete test pipeline:
+        - preprocess test with train scaler
+        - predict
+        - evaluate
+        """
+        X_te, y_te = self.preprocess(raw_test, is_training=False, **kwargs)
+        y_pred = self.predict(X_te, batch_size=batch_size)
+        return self.evaluate(y_te, y_pred, title=f"{self.model_name} - Test confusion matrix")
+
+    def save_model(
+        self,
+        params=None,
+        df_name="textual_embeddings_128",
+        model_family="transformer",
+        split_name="predefined_train_validation_test",
+        summary=None,
+        force=False,
+    ):
+        """
+        Save a PyTorch checkpoint plus a JSON summary.
+        """
+        params_to_save = params if params is not None else self.model_params
+        summary = summary if summary is not None else self.last_metrics
+
+        df_type = df_type_from_name(df_name)
+        model_slug = slug(self.model_name)
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        artifact_dir = PROJECT_ROOT / "Models" / df_type / model_slug
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        model_path = artifact_dir / f"{model_slug}__{timestamp}.pt"
+        summary_path = artifact_dir / f"{model_slug}__{timestamp}.json"
+
+        if model_path.exists() and not force:
+            raise FileExistsError(f"Model already exists: {model_path}")
+
+        checkpoint = {
+            "model_state_dict": self.model.cpu().state_dict(),
+            "model_params": self.model_params,
+            "scaler": self.scaler,
+            "article_cols": self.article_cols,
+            "ref_cols": self.ref_cols,
+            "threshold": self.threshold,
+            "history": self.history,
+        }
+        torch.save(checkpoint, model_path)
+        self.model.to(self.device)
+
+        payload = {
+            "timestamp": timestamp,
+            "df_type": df_type,
+            "df_name": df_name,
+            "model_family": model_family,
+            "model_name": self.model_name,
+            "split_name": split_name,
+            "params": params_to_save,
+            "model_path": str(model_path),
+            "performance": summary,
+        }
+        with open(summary_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, default=str)
+
+        print("Hyperparameters:", params_to_save)
+        print(f"Saved {self.model_name} model to:", model_path)
+        print("Saved summary to:", summary_path)
+        return model_path, summary_path
 
     

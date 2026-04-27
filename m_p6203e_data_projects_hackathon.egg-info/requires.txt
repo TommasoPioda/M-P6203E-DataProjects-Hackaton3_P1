@@ -1,12 +1,12 @@
-ipykernel
-jupyter
-matplotlib
 numpy
 pandas
+matplotlib
 seaborn
 scikit-learn
 pyarrow
 tqdm
+networkx
+xgboost
 torch
 torchvision
 torchaudio
