@@ -5,11 +5,17 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
 from sklearn.neighbors import KNeighborsClassifier
 from xgboost import XGBClassifier
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
-from utils.model_saver import save_model_artifact
+import lightgbm as lgb
+
 from sklearn.preprocessing import RobustScaler
+
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
+
+from utils.model_saver import save_model_artifact
+
 from tqdm.auto import tqdm
 from sklearn.model_selection import PredefinedSplit, GridSearchCV, RandomizedSearchCV
 import matplotlib.pyplot as plt
@@ -19,8 +25,15 @@ RANDOM_STATE=42
 from utils.embedding_transformer_utils import df_type_from_name, get_torch_device, slug
 from utils.textual_utils.config import PROJECT_ROOT
 
+import torch
+# Detect device: 'cuda' if available, else 'cpu'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Using device: {DEVICE}")
+
+# for parallelization
+N_JOBS = -1 if torch.cuda.is_available() else 1
+
 try:
-    import torch
     import torch.nn as nn
     from torch.utils.data import DataLoader, TensorDataset
     _TORCH_IMPORT_ERROR = None
@@ -62,7 +75,7 @@ class BaseModel(ABC):
     def grid_search(self):
         raise Exception('NO GRID SEARCH DEFINED!!')
 
-    def hypertune_pipeline(self, df_train, df_val, param_grid, n_jobs=-1, **kwargs):
+    def hypertune_pipeline(self, df_train, df_val, param_grid, n_jobs=N_JOBS, **kwargs):
         """ 
         Hypertune, find the best parameters.
         :param df_train: Dataframe with train features and targets.
@@ -164,7 +177,7 @@ class KNNModel(BaseModel):
     Implementation of the KNN Baseline model using paper features.
     Inherits from BaseModel.
     """
-    def __init__(self, model_name="KNN", n_jobs=-1, **kwargs):
+    def __init__(self, model_name="KNN", n_jobs=N_JOBS, **kwargs):
         # Initialize the scikit-learn KNN model
         knn_internal = KNeighborsClassifier(
             n_jobs=n_jobs,
@@ -200,7 +213,7 @@ class KNNModel(BaseModel):
 
         return X_scaled, y        
 
-    def grid_search(self, df_train, df_val, param_grid, max_tuning_samples=50000, n_jobs=-1, **kwargs) -> list:
+    def grid_search(self, df_train, df_val, param_grid, max_tuning_samples=50000, n_jobs=N_JOBS, **kwargs) -> list:
         """ 
         Hypertune, find the best parameters.
         :param X_val: Dataframe with validation features.
@@ -263,7 +276,7 @@ class XGBModel(BaseModel):
     Implementation of the XGB Baseline model using paper features.
     Inherits from BaseModel.
     """
-    def __init__(self, model_name='XGB', device='cuda', **kwargs):
+    def __init__(self, model_name='XGB', device=DEVICE, **kwargs):
         # Initialize the scikit-learn KNN model
         xgb_internal = XGBClassifier(
             device=device,
@@ -299,7 +312,7 @@ class XGBModel(BaseModel):
 
         return X_scaled, y        
 
-    def grid_search(self, df_train, df_val, param_grid, **kwargs):
+    def grid_search(self, df_train, df_val, param_grid, device=DEVICE, **kwargs):
         """
         Hypertune, find the best parameters.
         :param X_val: Dataframe with validation features.
@@ -315,7 +328,7 @@ class XGBModel(BaseModel):
         # GPU model
         model = XGBClassifier(
             tree_method="hist",   # madatory
-            device="cuda"         # use GPU
+            device=device         # use GPU
         )
 
         random_search = RandomizedSearchCV(
@@ -343,6 +356,74 @@ class XGBModel(BaseModel):
         """
         Get probability scores (useful for AUC calculation).
         """
+        return self.model.predict_proba(X)
+
+class LGBModel(BaseModel):
+    """ 
+    Implementation of the LightGBM model for large-scale embedding classification.
+    Optimized for high speed and parallelization.
+    """
+    def __init__(self, model_name='LGBM', device=DEVICE, n_jobs=N_JOBS, random_state=RANDOM_STATE, **kwargs):
+        # Initialize LightGBM Classifier
+        # device can be 'cpu' or 'gpu'
+        lgb_internal = lgb.LGBMClassifier(
+            device=device,
+            n_jobs=n_jobs,
+            random_state=random_state,
+            **kwargs
+        )
+        super().__init__(model_name=model_name, model=lgb_internal)
+        self.scaler = RobustScaler()
+
+    def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose=True) -> tuple:
+        if verbose:
+            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
+
+        drop_cols = ["is_reference_valid", "article_id", "ref_id", 
+                     "vector_text_article", "vector_text_ref", "split"]
+        
+        X = data.drop(columns=drop_cols, errors="ignore").copy()
+        y = data["is_reference_valid"].copy()
+
+        # Scaling is generally less critical for LGBM but RobustScaler handles potential embedding outliers well
+        if is_training:
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = self.scaler.transform(X)
+            
+        return X_scaled, y
+
+    def grid_search(self, df_train, df_val, param_grid, n_iter=15, n_jobs=N_JOBS, **kwargs):
+        """
+        Hyperparameter tuning using RandomizedSearchCV for efficiency.
+        """
+        print(f'[{self.model_name}] Starting Randomized Search...')
+        X_train_scaled, y_train = self.preprocess(df_train, is_training=True)
+        X_val_scaled, y_val = self.preprocess(df_val, is_training=False)
+
+        # We use a subset for tuning to speed up the process, 
+        # but LGBM is fast enough to handle larger chunks than KNN
+        model = lgb.LGBMClassifier(n_jobs=N_JOBS, random_state=RANDOM_STATE)
+
+        random_search = RandomizedSearchCV(
+            model,
+            param_distributions=param_grid,
+            n_iter=n_iter,
+            **kwargs
+        )
+
+        # Tuning on validation to find best params quickly
+        random_search.fit(X_val_scaled, y_val)
+
+        print(f"\nBest parameters: {random_search.best_params_}")
+        
+        # Final training on the full training set
+        self.model = random_search.best_estimator_
+        self.model.fit(X_train_scaled, y_train)
+        
+        return random_search
+
+    def predict_proba(self, X):
         return self.model.predict_proba(X)
 
 class PairEmbeddingTransformer(nn.Module if nn is not None else object):
@@ -694,3 +775,5 @@ class PairEmbeddingTransformerModel(BaseModel):
         print(f"Saved {self.model_name} model to:", model_path)
         print("Saved summary to:", summary_path)
         return model_path, summary_path
+
+

@@ -17,6 +17,7 @@ dependencies:
   - pyarrow
   - tqdm
   - xgboost
+  - lightgbm
   - networkx
   - joblib
   - nomkl
