@@ -343,5 +343,10 @@ $$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
 ## 8. Comparison
 
 ## 9. Interpretability
+To explain the behavior of the different models, we mainly rely on two explainability methods: **SHAP** and **LIME**.
+
+For the KNN model, since it is a **non-linear** and **instance-based** method, we use LIME because its predictions depend strongly on **local neighborhoods**, making local surrogate explanations more appropriate.
+
+For XGBoost, instead, we rely on SHAP. This is because SHAP is particularly well-suited for **tree-based models**, as it can efficiently compute exact or consistent feature contributions. Moreover, SHAP provides both global and local interpretability, allowing us to understand not only individual predictions but also the overall behavior of the model.
 
 ## 10. Conclusions
