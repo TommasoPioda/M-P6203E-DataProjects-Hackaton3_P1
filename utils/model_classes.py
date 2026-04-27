@@ -391,6 +391,7 @@ class LGBModel(BaseModel):
         
         X = data.drop(columns=drop_cols, errors="ignore").copy()
         y = data["is_reference_valid"].copy()
+        feature_names = X.columns.tolist()
 
         # 2. Scaling is generally less critical for LGBM but RobustScaler handles potential embedding outliers well
         if is_training:
@@ -398,9 +399,9 @@ class LGBModel(BaseModel):
         else:
             X_scaled = self.scaler.transform(X)
             
-        X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+        X_scaled = pd.DataFrame(X_scaled, columns=feature_names)
 
-        return X_scaled_df, y
+        return X_scaled, y
 
     def grid_search(self, df_train, df_val, param_grid, n_iter=15, n_jobs=N_JOBS, **kwargs):
         """
