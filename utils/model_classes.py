@@ -6,10 +6,15 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import KNeighborsClassifier
+from xgboost import XGBClassifier
 from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
 from utils.model_saver import save_model_artifact
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 from tqdm.auto import tqdm
+from sklearn.model_selection import PredefinedSplit, GridSearchCV, RandomizedSearchCV
+import matplotlib.pyplot as plt
+
+RANDOM_STATE=42
 
 from utils.embedding_transformer_utils import df_type_from_name, get_torch_device, slug
 from utils.textual_utils.config import PROJECT_ROOT
@@ -54,6 +59,23 @@ class BaseModel(ABC):
         print(f"[{self.model_name}] Starting training...")
         self.model.fit(X_train, y_train, **kwargs)
 
+    def grid_search(self):
+        raise Exception('NO GRID SEARCH DEFINED!!')
+
+    def hypertune_pipeline(self, df_train, df_val, param_grid, n_jobs=-1, **kwargs):
+        """ 
+        Hypertune, find the best parameters.
+        :param df_train: Dataframe with train features and targets.
+        :param df_val: Dtaaframe with validation features and targets.
+        :param param_grid: params to tune.
+        """
+        grid_search = self.grid_search(df_train, df_val, param_grid, n_jobs=n_jobs, **kwargs)
+        # final training creating model with best params
+        best_params = grid_search.best_params_
+        self.model = KNeighborsClassifier(**best_params, n_jobs=n_jobs)
+        print(f'[{self.model_name}] Train model with best params...')
+        self.train_pipeline(df_train)
+
     def predict(self, X):
         """
         Inference: Uses the trained model to make predictions.
@@ -76,7 +98,7 @@ class BaseModel(ABC):
         disp.plot(cmap="Blues")
 
 
-    def train_pipeline(self, raw_train, frac=0.01, **kwargs):
+    def train_pipeline(self, raw_train, frac=0.01, random_state=RANDOM_STATE, **kwargs):
         """
         Complete pipeline for train:
         - preprocess for training
@@ -87,15 +109,23 @@ class BaseModel(ABC):
         X_tr, y_tr = self.preprocess(raw_train, is_training=True, **kwargs)
         self.train(X_tr, y_tr)
 
-        import numpy as np
-        rng = np.random.default_rng(42)
-        idx = rng.choice(len(X_tr), size=int(len(X_tr) * frac), replace=False)
+        if frac < 1:
+            new_size = int(len(X_tr) * frac)
+            print(f"Selected {new_size}/{len(X_tr)}")
+            rng = np.random.default_rng(random_state)
+            idx = rng.choice(len(X_tr), size=new_size, replace=False)
 
-        X_sample = X_tr[idx]
-        y_sample = y_tr[idx]
+            X_sample = X_tr[idx]
+            y_sample = y_tr[idx]
 
-        y_pred = self.predict(X_sample)
-        self.evaluate(y_sample, y_pred)
+            X_tr = X_sample
+            y_tr = y_sample
+        elif frac > 1:
+            raise ValueError("Frac value not Valid (should be < 1)")
+    
+
+        y_tr = self.predict(X_tr)
+        self.evaluate(y_tr, y_tr)
 
     def test_pipeline(self, raw_test, **kwargs):
         """
@@ -129,10 +159,9 @@ class BaseModel(ABC):
         print("Saved summary to:", summary_path)
 
 
-
 class KNNModel(BaseModel):
     """
-    Implementation of the KNN Baseline model using paper embeddings.
+    Implementation of the KNN Baseline model using paper features.
     Inherits from BaseModel.
     """
     def __init__(self, model_name="KNN", n_jobs=-1, **kwargs):
@@ -144,7 +173,7 @@ class KNNModel(BaseModel):
         super().__init__(model_name=model_name, model=knn_internal)
         
         # We need to keep track of the scaler to apply the same transformation in test
-        self.scaler = StandardScaler()
+        self.scaler = RobustScaler()
 
     def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose=True) -> tuple:
         """
@@ -171,12 +200,150 @@ class KNNModel(BaseModel):
 
         return X_scaled, y        
 
+    def grid_search(self, df_train, df_val, param_grid, max_tuning_samples=50000, n_jobs=-1, **kwargs) -> list:
+        """ 
+        Hypertune, find the best parameters.
+        :param X_val: Dataframe with validation features.
+        :param y_val: Dtaaframe with validation targets.
+        :param param_grid: params to tune.
+        """
+        print(f'[{self.model_name}] Grid Search...')
+        # Downsampling for speed
+        def downsample_indices(indices, n_samples):
+            if len(indices) > n_samples:
+                return np.random.choice(indices, n_samples, replace=False)
+            return indices
+        
+        X_train_scaled, y_train = self.preprocess(df_train, is_training=True)
+        X_val_scaled, y_val = self.preprocess(df_val, is_training=False)
+
+        # sample for tuning
+        train_tuning_idx = downsample_indices(np.arange(len(X_train_scaled)), int(max_tuning_samples * 0.8))
+        val_tuning_idx = downsample_indices(np.arange(len(X_val_scaled)), int(max_tuning_samples * 0.2))
+
+        X_subset = np.vstack((X_train_scaled[train_tuning_idx], X_val_scaled[val_tuning_idx]))
+        y_subset = np.concatenate((y_train.iloc[train_tuning_idx], y_val.iloc[val_tuning_idx]))
+
+        # Create split indices: -1 for train, 0 for validation
+        split_index = np.concatenate([-1 * np.ones(len(train_tuning_idx)), 0 * np.ones(len(val_tuning_idx))])
+        ps = PredefinedSplit(test_fold=split_index)
+
+        # GridSearchCV
+        print(f"\nStarting tuning on {len(X_subset)} samples...")
+        grid_search = GridSearchCV(
+            KNeighborsClassifier(n_jobs=n_jobs), 
+            param_grid=param_grid, 
+            cv=ps,
+            n_jobs=n_jobs, 
+            **kwargs
+        )
+        grid_search.fit(X_subset, y_subset)
+
+        # print results
+        best_params = grid_search.best_params_
+        print("\nBest parameters found:")
+        print(best_params)
+
+        # Final training on the full dataset with the best parameters
+        model = grid_search.best_estimator_
+        model.fit(X_train_scaled, y_train)
+
+        print(f"\nOptimal model ready: {model}")
+
+        return grid_search
+
     def predict_proba(self, X):
         """
         Get probability scores (useful for AUC calculation).
         """
         return self.model.predict_proba(X)
 
+class XGBModel(BaseModel):
+    """ 
+    Implementation of the XGB Baseline model using paper features.
+    Inherits from BaseModel.
+    """
+    def __init__(self, model_name='XGB', device='cuda', **kwargs):
+        # Initialize the scikit-learn KNN model
+        xgb_internal = XGBClassifier(
+            device=device,
+            **kwargs
+        )
+        super().__init__(model_name=model_name, model=xgb_internal)
+        
+        # We need to keep track of the scaler to apply the same transformation in test
+        self.scaler = RobustScaler()
+
+    def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose=True) -> tuple:
+        """
+        Prepares features by concatenating article and reference embeddings.
+        :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
+        :param is_training: If True, fits the scaler. If False, only transforms.
+        """
+        print(f"[{self.model_name}] Preprocessing data...")
+
+        # 1. drop columns that are not features (handling names based on your notebook)
+        drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
+        X = data.drop(columns=drop_cols, errors="ignore").copy()
+        y = data["is_reference_valid"].copy()
+
+        # 2. Scaling
+        if is_training:
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = self.scaler.transform(X)
+            
+        if verbose:
+            print("Label distribution:")
+            print(y.value_counts(normalize=True))
+
+        return X_scaled, y        
+
+    def grid_search(self, df_train, df_val, param_grid, **kwargs):
+        """
+        Hypertune, find the best parameters.
+        :param X_val: Dataframe with validation features.
+        :param y_val: Dtaaframe with validation targets.
+        :param param_grid: params to tune.
+        """
+
+        print(f'[{self.model_name}] Grid Search...')
+        # preprocess data
+        X_train_scaled, y_train = self.preprocess(df_train, is_training=True)
+        X_val_scaled, y_val = self.preprocess(df_val, is_training=False)
+
+        # GPU model
+        model = XGBClassifier(
+            tree_method="hist",   # madatory
+            device="cuda"         # use GPU
+        )
+
+        random_search = RandomizedSearchCV(
+            model,
+            param_distributions=param_grid,
+            **kwargs
+        )
+
+        # Run randomized search on the validation split (kept small by earlier sampling)
+        random_search.fit(X_val_scaled, y_val)
+
+        best_params = random_search.best_params_
+        print("\nBest parameters found:")
+        print(best_params)
+
+        # Final training on the full dataset with the best parameters
+        model = random_search.best_estimator_
+        model.fit(X_train_scaled, y_train)
+        print(f"\nOptimal model ready: {model}")
+
+        return random_search
+
+
+    def predict_proba(self, X):
+        """
+        Get probability scores (useful for AUC calculation).
+        """
+        return self.model.predict_proba(X)
 
 class PairEmbeddingTransformer(nn.Module if nn is not None else object):
     """
@@ -260,7 +427,7 @@ class PairEmbeddingTransformerModel(BaseModel):
         transformer = PairEmbeddingTransformer(**self.model_params).to(self.device)
         super().__init__(model_name=model_name, model=transformer)
 
-        self.scaler = StandardScaler()
+        self.scaler = RobustScaler()
         self.article_cols: list[str] | None = None
         self.ref_cols: list[str] | None = None
         self.history: list[dict] = []
@@ -428,8 +595,6 @@ class PairEmbeddingTransformerModel(BaseModel):
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
         disp.plot(cmap="Blues")
         if title:
-            import matplotlib.pyplot as plt
-
             plt.title(title)
             plt.show()
 
@@ -529,5 +694,3 @@ class PairEmbeddingTransformerModel(BaseModel):
         print(f"Saved {self.model_name} model to:", model_path)
         print("Saved summary to:", summary_path)
         return model_path, summary_path
-
-    
