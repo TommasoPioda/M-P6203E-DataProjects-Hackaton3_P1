@@ -1,7 +1,9 @@
 name: hack_03
 channels:
+  # - intel
   - conda-forge
   - pytorch
+  - defaults
 dependencies:
   - python=3.11
   - ipykernel
@@ -16,6 +18,7 @@ dependencies:
   - xgboost
   - networkx
   - joblib
+  - nomkl
   - pip
   - pip:
       - torch
