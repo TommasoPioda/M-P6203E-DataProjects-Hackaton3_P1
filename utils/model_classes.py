@@ -786,7 +786,7 @@ class GraphFeatureTransformer(nn.Module if nn is not None else object):
         return self.classifier(cls_output).squeeze(-1)
 
 
-class  SimpleTransformer(BaseModel):
+class SimpleTransformer(BaseModel):
     """
     Transformer model wrapper for graph features.
 
@@ -1055,5 +1055,65 @@ class  SimpleTransformer(BaseModel):
         X_te, y_te = self.preprocess(raw_test, is_training=False, **kwargs)
         y_pred = self.predict(X_te, batch_size=batch_size)
         return self.evaluate(y_te, y_pred, title=f"{self.model_name} - Test confusion matrix")
+
+    def save_model(
+        self,
+        params=None,
+        df_name="graph_features",
+        model_family="transformer",
+        split_name="predefined_train_validation_test",
+        summary=None,
+        force=False,
+    ):
+        """
+        Save a PyTorch checkpoint plus a JSON summary.
+        """
+        if self.model is None:
+            raise ValueError("SimpleTransformer model is not initialized.")
+
+        params_to_save = params if params is not None else self.model_params
+        summary = summary if summary is not None else self.last_metrics
+
+        df_type = df_type_from_name(df_name)
+        model_slug = slug(self.model_name)
+        timestamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+        artifact_dir = PROJECT_ROOT / "Models" / df_type / model_slug
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+
+        model_path = artifact_dir / f"{model_slug}__{timestamp}.pt"
+        summary_path = artifact_dir / f"{model_slug}__{timestamp}.json"
+
+        if model_path.exists() and not force:
+            raise FileExistsError(f"Model already exists: {model_path}")
+
+        checkpoint = {
+            "model_state_dict": self.model.cpu().state_dict(),
+            "model_params": self.model_params,
+            "scaler": self.scaler,
+            "feature_cols": self.feature_cols,
+            "threshold": self.threshold,
+            "history": self.history,
+        }
+        torch.save(checkpoint, model_path)
+        self.model.to(self.device)
+
+        payload = {
+            "timestamp": timestamp,
+            "df_type": df_type,
+            "df_name": df_name,
+            "model_family": model_family,
+            "model_name": self.model_name,
+            "split_name": split_name,
+            "params": params_to_save,
+            "model_path": str(model_path),
+            "performance": summary,
+        }
+        with open(summary_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, default=str)
+
+        print("Hyperparameters:", params_to_save)
+        print(f"Saved {self.model_name} model to:", model_path)
+        print("Saved summary to:", summary_path)
+        return model_path, summary_path
 
 SimpleTransformerModel = SimpleTransformer
