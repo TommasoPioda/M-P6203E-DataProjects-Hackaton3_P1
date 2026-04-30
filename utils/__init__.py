@@ -23,18 +23,30 @@ from .embedding_transformer_utils import (
     find_project_root,
     get_torch_device,
     load_pair_embedding_transformer_model,
+    load_simple_transformer_model,
     sample_dataframe,
     set_torch_seed,
     slug,
 )
 
 try:
-    from .model_classes import BaseModel, KNNModel, PairEmbeddingTransformer, PairEmbeddingTransformerModel
+    from .model_classes import (
+        BaseModel,
+        GraphFeatureTransformer,
+        KNNModel,
+        PairEmbeddingTransformer,
+        PairEmbeddingTransformerModel,
+        SimpleTransformer,
+        SimpleTransformerModel,
+    )
 except (ImportError, OSError):
     BaseModel = None
+    GraphFeatureTransformer = None
     KNNModel = None
     PairEmbeddingTransformer = None
     PairEmbeddingTransformerModel = None
+    SimpleTransformer = None
+    SimpleTransformerModel = None
 
 # Optional torch-dependent imports: keep lightweight utilities usable even when
 # torch or one of its Windows DLL dependencies is unavailable.

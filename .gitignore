@@ -57,9 +57,6 @@ temp/
 # Model artifacts: ignore saved model files and generated metadata under Models/
 # - .joblib files (sklearn/runtime dumps)
 Models/**/*.joblib
-# - PyTorch checkpoints and pickle dumps
-Models/**/*.pt
-Models/**/*.pkl
 # - optional runtime alias
 Models/**/__runtime.joblib
 # - summary/metadata written by save_model_artifact

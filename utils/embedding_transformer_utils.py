@@ -89,3 +89,30 @@ def load_pair_embedding_transformer_model(checkpoint_path: str | Path, model_nam
     loaded_model.history = checkpoint.get("history", [])
     loaded_model.model.eval()
     return loaded_model
+
+
+def load_simple_transformer_model(checkpoint_path: str | Path, model_name: str = "SimpleTransformer_graph", device=None):
+    """Load a SimpleTransformer checkpoint saved by the model wrapper."""
+    import torch
+    from utils.model_classes import SimpleTransformer
+
+    checkpoint_path = Path(checkpoint_path)
+    device = device or get_torch_device()
+
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    except TypeError:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    loaded_model = SimpleTransformer(
+        model_name=model_name,
+        device=device,
+        feature_cols=checkpoint["feature_cols"],
+        **checkpoint["model_params"],
+    )
+    loaded_model.model.load_state_dict(checkpoint["model_state_dict"])
+    loaded_model.scaler = checkpoint["scaler"]
+    loaded_model.threshold = checkpoint.get("threshold", 0.5)
+    loaded_model.history = checkpoint.get("history", [])
+    loaded_model.model.eval()
+    return loaded_model
