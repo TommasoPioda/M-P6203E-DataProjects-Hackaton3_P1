@@ -17,9 +17,6 @@ Requires-Dist: pyarrow
 Requires-Dist: tqdm
 Requires-Dist: networkx
 Requires-Dist: xgboost
-Requires-Dist: torch
-Requires-Dist: torchvision
-Requires-Dist: torchaudio
 Requires-Dist: sentence-transformers
 Requires-Dist: transformers
 Dynamic: author

@@ -33,6 +33,9 @@ print(f"Using device: {DEVICE}")
 # for parallelization
 N_JOBS = -1 if torch.cuda.is_available() else 1
 
+def _is_cuda_device(device) -> bool:
+    return str(device).lower().startswith("cuda")
+
 try:
     import torch.nn as nn
     from torch.utils.data import DataLoader, TensorDataset
@@ -75,19 +78,21 @@ class BaseModel(ABC):
     def grid_search(self):
         raise Exception('NO GRID SEARCH DEFINED!!')
 
-    def hypertune_pipeline(self, df_train, df_val, param_grid, n_jobs=N_JOBS, **kwargs):
+    def hypertune_pipeline(self, df_train, df_val, param_grid, n_jobs=N_JOBS, frac=0.01, **kwargs):
         """ 
         Hypertune, find the best parameters.
         :param df_train: Dataframe with train features and targets.
         :param df_val: Dtaaframe with validation features and targets.
         :param param_grid: params to tune.
         """
+        # Guard against accidental forwarding of training-only args to GridSearchCV.
+        frac = kwargs.pop("frac", frac)
         grid_search = self.grid_search(df_train, df_val, param_grid, n_jobs=n_jobs, **kwargs)
         # final training creating model with best params
         best_params = grid_search.best_params_
-        self.model = KNeighborsClassifier(**best_params, n_jobs=n_jobs)
+        self.model.set_params(**best_params)
         print(f'[{self.model_name}] Train model with best params...')
-        self.train_pipeline(df_train)
+        self.train_pipeline(df_train, frac=frac)
 
     def predict(self, X):
         """
@@ -148,6 +153,7 @@ class BaseModel(ABC):
         - evaluation
         """
         X_te, y_te = self.preprocess(raw_test, is_training=False, **kwargs)
+
         y_pred = self.predict(X_te)
         self.evaluate(y_te, y_pred)
 
@@ -314,7 +320,7 @@ class XGBModel(BaseModel):
 
         return X_scaled, y        
 
-    def grid_search(self, df_train, df_val, param_grid, device=DEVICE, **kwargs):
+    def grid_search(self, df_train, df_val, param_grid, device=DEVICE, n_jobs=N_JOBS, **kwargs):
         """
         Hypertune, find the best parameters.
         :param X_val: Dataframe with validation features.
@@ -327,15 +333,27 @@ class XGBModel(BaseModel):
         X_train_scaled, y_train = self.preprocess(df_train, is_training=True)
         X_val_scaled, y_val = self.preprocess(df_val, is_training=False)
 
-        # GPU model
-        model = XGBClassifier(
-            tree_method="hist",   # madatory
-            device=device         # use GPU
-        )
+        search_n_jobs = 1 if _is_cuda_device(device) else n_jobs
+        if _is_cuda_device(device) and n_jobs != 1:
+            print(
+                f"[{self.model_name}] CUDA detected: using n_jobs=1 for RandomizedSearchCV "
+                "to avoid running multiple GPU fits at the same time."
+            )
+
+        model_params = self.model.get_params()
+        model_params.update({
+            "tree_method": model_params.get("tree_method") or "hist",
+            "device": device,
+        })
+        if _is_cuda_device(device):
+            model_params["n_jobs"] = 1
+
+        model = XGBClassifier(**model_params)
 
         random_search = RandomizedSearchCV(
             model,
             param_distributions=param_grid,
+            n_jobs=search_n_jobs,
             **kwargs
         )
 
@@ -346,10 +364,7 @@ class XGBModel(BaseModel):
         print("\nBest parameters found:")
         print(best_params)
 
-        # Final training on the full dataset with the best parameters
-        model = random_search.best_estimator_
-        model.fit(X_train_scaled, y_train)
-        print(f"\nOptimal model ready: {model}")
+        print(f"\nOptimal model ready: {random_search.best_estimator_}")
 
         return random_search
 
@@ -440,7 +455,7 @@ class PairEmbeddingTransformer(nn.Module if nn is not None else object):
     """
     Lightweight Transformer encoder for article/reference embedding pairs.
 
-    Input shape: [batch, 2, 128]
+    Input shape: [batch, 2, embedding_dim]
     - token 0: article embedding
     - token 1: reference embedding
     """
@@ -505,13 +520,15 @@ class PairEmbeddingTransformerModel(BaseModel):
     def __init__(self, model_name: str = "pair_embedding_transformer_128", device=None, **model_params):
         if torch is None or nn is None:
             raise OSError(f"PyTorch is required for PairEmbeddingTransformerModel: {_TORCH_IMPORT_ERROR}")
+        if "embedding_dim" not in model_params:
+            raise ValueError("embedding_dim must be specified in model_params for PairEmbeddingTransformerModel")
         self.model_params = {
-            "embedding_dim": 128,
-            "d_model": 128,
-            "nhead": 16,
-            "num_layers": 4,
-            "dim_feedforward": 256,
-            "dropout": 0.15,
+            "embedding_dim": model_params["embedding_dim"],
+            "d_model": model_params.get("d_model", model_params["embedding_dim"]),
+            "nhead": model_params.get("nhead", 8),
+            "num_layers": model_params.get("num_layers", 2),
+            "dim_feedforward": model_params.get("dim_feedforward", model_params["embedding_dim"] * 2),
+            "dropout": model_params.get("dropout", 0.15),
         }
         self.model_params.update(model_params)
         self.device = device or get_torch_device()
@@ -530,15 +547,15 @@ class PairEmbeddingTransformerModel(BaseModel):
             self.article_cols = sorted([col for col in data.columns if col.startswith("article_emb_")])
         if self.ref_cols is None:
             self.ref_cols = sorted([col for col in data.columns if col.startswith("ref_emb_")])
-        if len(self.article_cols) != 128 or len(self.ref_cols) != 128:
+        if len(self.article_cols) != self.model_params["embedding_dim"] or len(self.ref_cols) != self.model_params["embedding_dim"]:
             raise ValueError(
-                f"Expected 128 article/ref embedding columns, found "
+                f"Expected {self.model_params['embedding_dim']} article/ref embedding columns, found "
                 f"{len(self.article_cols)} and {len(self.ref_cols)}"
             )
 
     def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose: bool = True) -> tuple:
         """
-        Prepare embedding pairs as [n_rows, 2, 128].
+        Prepare embedding pairs as [n_rows, 2, embedding_dim].
 
         The scaler is fit only on training data and reused for validation/test,
         matching the behavior of KNNModel.
@@ -556,7 +573,8 @@ class PairEmbeddingTransformerModel(BaseModel):
         else:
             flat_features = self.scaler.transform(flat_features)
 
-        X = flat_features.astype(np.float32).reshape(-1, 2, 128)
+        embedding_dim = self.model_params["embedding_dim"]
+        X = flat_features.astype(np.float32).reshape(-1, 2, embedding_dim)
 
         if verbose:
             print("Label distribution:")

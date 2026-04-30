@@ -57,12 +57,19 @@ temp/
 # Model artifacts: ignore saved model files and generated metadata under Models/
 # - .joblib files (sklearn/runtime dumps)
 Models/**/*.joblib
+# - PyTorch checkpoints and pickle dumps
+Models/**/*.pt
+Models/**/*.pkl
 # - optional runtime alias
 Models/**/__runtime.joblib
 # - summary/metadata written by save_model_artifact
 Models/**/summary__*.json
+# - timestamped metadata written beside saved model artifacts
+Models/**/*.json
 # - cross-validation results exported by save_model_artifact
 Models/**/cv_results__*.csv
 # - transformer-style saved-model directories named like "<slug>__<compact>__<hash>/"
 Models/**/*__*__*/
+# - local notebook output model dumps
+**/models/**/*.pkl
 

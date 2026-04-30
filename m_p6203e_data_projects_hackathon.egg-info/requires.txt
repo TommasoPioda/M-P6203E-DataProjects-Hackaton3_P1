@@ -7,8 +7,5 @@ pyarrow
 tqdm
 networkx
 xgboost
-torch
-torchvision
-torchaudio
 sentence-transformers
 transformers
