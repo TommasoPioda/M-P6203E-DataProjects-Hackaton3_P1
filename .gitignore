@@ -71,3 +71,4 @@ Models/**/*__*__*/
 # - local notebook output model dumps
 **/models/**/*.pkl
 
+Models/
