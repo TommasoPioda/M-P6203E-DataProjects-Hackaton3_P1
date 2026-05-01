@@ -3,6 +3,7 @@ node_modules/
 vendor/
 Data/
 data/
+MODELZOO/
 DBLP-Citation-network-V18*
 models_checkpoints/
 
