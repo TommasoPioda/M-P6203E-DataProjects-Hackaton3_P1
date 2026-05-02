@@ -1,6 +1,6 @@
 from lime.lime_tabular import LimeTabularExplainer
 import shap
-
+from IPython.display import display, HTML
 
 def lime_explainer(X_train, X_test, y_test, model):
     """
@@ -38,7 +38,7 @@ def lime_explainer(X_train, X_test, y_test, model):
         model.predict_proba
         )
 
-    exp_val.show_in_notebook()
+    display(HTML(exp_val.as_html()))
 
     #explain valid reference
     print("\nInvalid reference")
@@ -47,7 +47,7 @@ def lime_explainer(X_train, X_test, y_test, model):
         model.predict_proba
         )
 
-    exp_inval.show_in_notebook()
+    display(HTML(exp_inval.as_html()))
 
 def shap_tree_explainer(X_test, model):
     """
