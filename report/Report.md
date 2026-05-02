@@ -267,7 +267,7 @@ min number of years per set: 10
 | Validation | 2005 - 2014 | 17.00% | 150,000 | 150,000 |
 | Test | 2015 - 2024 | 19.66% | 150,000 | 150,000 |
 
-> The validation and test set has a smaller % of samples on the biggest connected cluster makes sense because they cover a smaller temporal range. Usually, to start to be cited, the paper should be published for some years in order to be known.
+> The validation and test set has a smaller % of samples on the biggest connected cluster, it makes sense because they cover a smaller temporal range. Usually, to start to be cited, the paper should be published for some years in order to be known.
 ---
 
 ## 5. Remaining Data Characteristics & Considerations
@@ -331,6 +331,8 @@ The features `n_keywords_article`, `n_keywords_ref`, `n_authors_article` and `n_
 
 The normal features pipeline successfully produced **56 completely usable features** across all train, validation, and test datasets. These features combine numeric metadata (citation counts, publication years, page counts), encoded categorical information (document types, languages), and semantic representations (hashed keywords and author collaboration scale), providing a comprehensive numerical representation suitable for classification tasks like citation prediction.
 
+### 6.2 Textual Features
+TODO TOM
 ### 6.3 Graph Features
 
 #### **Network Construction**
@@ -342,19 +344,19 @@ The normal features pipeline successfully produced **56 completely usable featur
 
 The extracted graph features are divided into three main categories based on their structural depth:
 
-- `Node Features (Individual Importance)`: These describe the role and authority of each individual article within the network:
+- ***Node Features (Individual Importance)***: These describe the role and authority of each individual article within the network:
     * **in_***: *In-degree*; the number of citations received (a measure of popularity/prestige).
     * **out_***: *Out-degree*; the number of references made (a measure of bibliographic breadth).
     * **pagerank_***: A centrality score defining the relative importance of the paper based on the quality of its incoming citations.
     * **avg_neigh_degree_***: The average degree of a node's neighbors, helping to identify nodes connected to major hubs or isolated clusters.
     * **katz_cent_***: An influence measure that considers both direct and long-range indirect connections.
 
-- `Neighborhood Features (Local Context)`: These analyze the local overlap between the article and the reference:
+- ***Neighborhood Features (Local Context)***: These analyze the local overlap between the article and the reference:
     * **common_neighbors**: The absolute count of shared neighbors in the undirected version of the graph, indicating a common scientific foundation.
 
 
 
-- `Relational Features (Pairwise Interaction)`: These capture the hierarchical dynamics and specific structural similarity between the pair of nodes:
+- ***Relational Features (Pairwise Interaction)***: These capture the hierarchical dynamics and specific structural similarity between the pair of nodes:
     * **degree_ratio**: The ratio between the out-degree of the article and the reference, used to balance the activity levels of the two nodes.
     * **pagerank_ratio**: The disparity in importance between the article and the reference; it identifies typical patterns, such as new papers citing "classics."
     * **pagerank_prod**: The product of the importance of both nodes, highlighting connections between two pillar nodes of the network.
@@ -362,7 +364,50 @@ The extracted graph features are divided into three main categories based on the
 
 $$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
 
+### 6.4 Mix features
+all features. TODO
+
 ## 7. Models
+By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
+
+- `BaseModel`: An abstract base class that serves as the blueprint for all architectures. It enforces the implementation of a `preprocess()` method and provides standardized `train_pipeline` and `test_pipeline` methods to maintain consistency across the project.
+
+- `KNNModel` & `XGBModel`: Concrete implementations that encapsulate feature engineering logic (such as dropping non-feature columns) and stateful preprocessing. They utilize a `RobustScaler` to ensure the test set is scaled using training statistics, providing resilience against outliers in metadata.
+
+- `SimpleTransformer`: A PyTorch wrapper designed for metadata-based features. Instead of traditional textual embeddings, it treats each scalar feature as a unique token. The model learns feature-specific embeddings, processes them through a Transformer encoder, and predicts citation validity. It includes support for early stopping via a validation monitor and saves reloadable checkpoints.
+
+### Why we chose these models?
+We selected these three architectures to capture the citation problem from different perspectives, ranging from local structural patterns to complex feature interactions:  
+- **KNN (K-Nearest Neighbors)**: chosen for its ability to identify local clusters in graph features, assuming that papers with similar connectivity patterns are likely to share similar citation behaviors.  
+
+- **XGBoost**: selected for its state-of-the-art performance on tabular metadata, efficiently handling non-linear relationships and high-cardinality features like hashed keywords.  
+
+- **Simple Transformer**: implemented to capture high-order interactions between metadata fields through an attention mechanism, treating each numerical feature as a "token" to learn deep contextual relationships.
+
+### 7.1 Baseline
+Before proceeding with hyperparameter optimization, we established a Baseline Model for each architecture using default or heuristically chosen parameters. This step is crucial to:
+
+- **Establish a Performance Floor**: Quantify the predictive power of the raw features without fine-tuning.
+
+- **Validate the Pipeline**: Ensure that the data flow—from preprocessing to evaluation—is robust and free of leakage.
+
+- **Benchmark Gains**: Measure the actual "value add" of the subsequent hypertuning phase.
+
+### 7.2 Hypertuning
+Given the large scale of the dataset and the high dimensionality of the features, we employed distinct tuning strategies tailored to each algorithm's computational requirements:
+
+* **XGBoost $\rightarrow$ Randomized Search**: Performing an exhaustive grid search for XGBoost is computationally prohibitive. We utilized `RandomizedSearchCV` to sample a fixed number of parameter settings from specified distributions. This allowed us to efficiently explore key hyperparameters, such as learning rate, tree depth, and regularization, finding optimal solutions in a fraction of the time. We used a **2-fold cross-validation** approach on a controlled subset to manage the memory footprint, which is critical for GPU-accelerated training on Windows systems.
+
+* **KNN $\rightarrow$ Grid Search with Predefined Splits**: KNN is particularly sensitive to distance metrics and neighbor counts. To optimize performance, we performed `GridSearchCV` on a representative subset of the records. To prevent data leakage and ensure the model was tuned on the exact distribution intended for validation, we used a `PredefinedSplit` strategy. This manually specifies training and validation folds rather than using standard randomized K-fold splits.
+
+### 7.3 Final Evaluation
+Once the optimal hyperparameters (e.g., number of neighbors, weight functions, or tree depth) were identified, each model was retrained on the full training set. We assessed performance using a comprehensive suite of metrics:
+
+- **Weighted F1-Score**: Our primary metric, chosen to account for any slight imbalances in the class distribution.
+
+- **Confusion Matrix**: Utilized to visualize and differentiate between Type I (false positives) and Type II (false negatives) errors.
+
+- **Classification Report**: Used to evaluate precision, recall, and accuracy at a granular level, ensuring the model performs consistently across both valid and invalid citation pairs.
 
 ## 8. Comparison
 
