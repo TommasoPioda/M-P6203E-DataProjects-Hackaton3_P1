@@ -89,7 +89,8 @@ Initial field-level inspection identified key data quality issues that guided su
 | Doc_type | 0% NaN, mixed case variants present | Standardization needed |
 | Year | 0% NaN, range 1800–2027 with invalid entries | Temporal filtering required |
 
-These findings informed the cleaning strategy outlined in Section 2.1 .
+These findings informed the cleaning strategy outlined in [Section 2.1](#21-data-type-validation--normalization) .
+
 ---
 
 ## 2 Cleaning Pipeline
@@ -307,14 +308,37 @@ min number of years per set: 10
 
 ## 6. Feature Engineering
 
-### 6.3 Graph Feature
+### 6.1 Normal Features
+The normal features pipeline focuses on transforming raw metadata into a model-ready format by handling categorical variables, encoding high-cardinality features, and deriving quantitative insights from structured data. This process ensures compatibility with machine learning algorithms while preserving meaningful information about papers and their references.
 
-**Network Construction**
+#### **Column Filtering**
+The irrelevant columns, such as identifiers (`article_id`, `ref_id`), textual long contents (`title_article`, `title_ref`, `abstract_article`, `abstract_ref`) and the split indicator columns are removed, to focus on the predictive features.
+
+#### **Feature Derivation**
+The features `n_keywords_article`, `n_keywords_ref`, `n_authors_article` and `n_authors_ref` are included to provide the model with quantitative context regarding the metadata density of the papers before encode and modify them.
+
+#### **Categorical Encoding**
+- **Low cardinality Features $\rightarrow$ One-Hot Encoding (OHE)**
+    For features with limited unique values, OHE provides a clear signal without a significant increase in dimensionality:
+    *   **Document Type**: with only 2 unique values for both article and reference (`doc_type_article` and `doc_type_ref`), OHE is used to represent the publication format efficiently.
+    *   **Language (Top 5 + Other)**: to manage the 20-30 unique languages, we encode the **Top 5 most frequent languages** via OHE and group the remaining "long tail" into a single "Other" category. This preserves the most significant linguistic patterns while reducing noise.
+
+- **High-Cardinality Features $\rightarrow$ Hashing and Dropping**
+    Handling columns like `authors` (over 6M unique IDs) and `keywords` (approx. 243K unique values) requires avoiding memory-intensive methods like One-Hot Encoding:
+    *   **Keywords (Feature Hashing)**: **Hashing** is used to map the vast vocabulary of keywords into a fixed-dimensional space. This ensures the model captures semantic tags while maintaining a constant memory footprint and high parallelization efficiency.
+    > Since we don't want too much features, we decided to hash with 16 even if there is an high risk of collision.
+    *   **Authors (Dropped)**: due to the extreme sparsity (more unique authors than total rows), individual author IDs are unlikely to generalize. We retain the numerical count (`n_authors`) to capture the "collaboration scale" while dropping the raw IDs to prevent overfitting.
+
+The normal features pipeline successfully produced **56 completely usable features** across all train, validation, and test datasets. These features combine numeric metadata (citation counts, publication years, page counts), encoded categorical information (document types, languages), and semantic representations (hashed keywords and author collaboration scale), providing a comprehensive numerical representation suitable for classification tasks like citation prediction.
+
+### 6.3 Graph Features
+
+#### **Network Construction**
 
 - The network is built as a directed graph where each edge represents a validated citation (`Target = 1`) pointing from the citing article to the referred paper.
 - To ensure data consistency and prevent `NodeNotFound` errors during inference, all papers present in the dataset—including isolated nodes without active citations—have been explicitly added to the graph.
 
-**Feature Categorization**
+#### **Feature Categorization**
 
 The extracted graph features are divided into three main categories based on their structural depth:
 
