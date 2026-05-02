@@ -460,7 +460,6 @@ class PairEmbeddingTransformer(nn.Module if nn is not None else object):
             dropout=dropout,
             activation="gelu",
             batch_first=True,
-            norm_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.norm = nn.LayerNorm(d_model)
@@ -788,7 +787,7 @@ class GraphFeatureTransformer(nn.Module if nn is not None else object):
 
 class SimpleTransformer(BaseModel):
     """
-    Transformer model wrapper for graph features.
+    Transformer model wrapper for numeric tabular features.
 
     It follows the same public API as the other model classes:
     - preprocess
@@ -845,7 +844,7 @@ class SimpleTransformer(BaseModel):
         candidate = data.drop(columns=drop_cols, errors="ignore").copy()
         numeric_cols = candidate.select_dtypes(include=[np.number, "bool"]).columns.tolist()
         if not numeric_cols:
-            raise ValueError("No numeric graph feature columns found for SimpleTransformer")
+            raise ValueError("No numeric feature columns found for SimpleTransformer")
         return numeric_cols
 
     def _ensure_feature_columns(self, data: pd.DataFrame, is_training: bool) -> None:
@@ -856,18 +855,18 @@ class SimpleTransformer(BaseModel):
 
         missing_cols = [col for col in self.feature_cols if col not in data.columns]
         if missing_cols:
-            raise ValueError(f"Missing graph feature columns: {missing_cols}")
+            raise ValueError(f"Missing feature columns: {missing_cols}")
 
         expected_features = self.model_params.get("num_features")
         if expected_features is not None and len(self.feature_cols) != expected_features:
             raise ValueError(
-                f"Expected {expected_features} graph feature columns, found {len(self.feature_cols)}"
+                f"Expected {expected_features} feature columns, found {len(self.feature_cols)}"
             )
         self._init_model(len(self.feature_cols))
 
     def preprocess(self, data: pd.DataFrame, is_training: bool = True, verbose: bool = True) -> tuple:
         """
-        Prepare graph features as a float matrix [n_rows, n_graph_features].
+        Prepare numeric features as a float matrix [n_rows, n_features].
         """
         if verbose:
             print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
@@ -924,7 +923,7 @@ class SimpleTransformer(BaseModel):
         **kwargs,
     ):
         """
-        Train the graph-feature transformer.
+        Train the tabular-feature transformer.
         """
         if self.model is None:
             self._init_model(X_train.shape[1])
