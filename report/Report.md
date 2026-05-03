@@ -329,7 +329,64 @@ The features `n_keywords_article`, `n_keywords_ref`, `n_authors_article` and `n_
 The normal features pipeline successfully produced **56 completely usable features** across all train, validation, and test datasets. These features combine numeric metadata (citation counts, publication years, page counts), encoded categorical information (document types, languages), and semantic representations (hashed keywords and author collaboration scale), providing a comprehensive numerical representation suitable for classification tasks like citation prediction.
 
 ### 5.2 Textual Features
-TODO TOM
+The textual feature pipeline is designed to capture semantic similarity between the citing article and the candidate reference. While the normal feature set keeps structured metadata and the graph feature set models citation topology, this pipeline focuses on the information contained in titles, abstracts, keywords and author names.
+
+#### **Text Construction**
+
+For each article-reference pair, two textual fields are created:
+
+- `vector_text_article`: concatenation of `title_article`, `abstract_article`, `keywords_article` and, when available, author names.
+- `vector_text_ref`: concatenation of `title_ref`, `abstract_ref`, `keywords_ref` and, when available, author names.
+
+Missing textual values are replaced with empty strings so that the vectorization step remains stable. The same construction is applied to train, validation and test data, but the vectorizer is fitted only on the training split to avoid information leakage.
+
+#### **TF-IDF Vectorization**
+
+Text is transformed with a `TfidfVectorizer`, using a fixed maximum vocabulary size and English stop-word filtering. TF-IDF was selected because it is memory-efficient, interpretable and well suited for large sparse scientific-text collections.
+
+The vectorizer is fitted on the union of article and reference texts from the training set. Afterwards, article and reference texts are transformed separately, producing two sparse matrices:
+
+- one matrix for citing-paper text;
+- one matrix for candidate-reference text.
+
+A pairwise TF-IDF cosine similarity is also computed as a direct semantic-similarity signal between the two texts.
+
+#### **Dense Embeddings with TruncatedSVD**
+
+The sparse TF-IDF matrices are reduced with `TruncatedSVD` to produce compact dense embeddings. Two embedding sizes were generated:
+
+| Embedding set | Rows | Columns | Structure |
+|---------------|------|---------|-----------|
+| Textual embeddings 64 | 2,950,135 | 132 | 4 metadata columns + 64 article embeddings + 64 reference embeddings |
+| Textual embeddings 128 | 2,950,135 | 260 | 4 metadata columns + 128 article embeddings + 128 reference embeddings |
+
+The metadata columns retained in both datasets are `split`, `article_id`, `ref_id` and `is_reference_valid`. The split distribution is the same for both embedding sizes:
+
+| Split | Rows |
+|-------|------|
+| Train | 2,162,513 |
+| Validation | 391,242 |
+| Test | 396,380 |
+
+#### **Embedding Quality Checks**
+
+The embeddings were evaluated before model training using several checks:
+
+- **Norm statistics**: verified that article and reference embeddings have stable magnitudes.
+- **Cosine similarity by label**: valid references show higher average cosine similarity than invalid pairs.
+- **Nearest neighbors**: inspected whether semantically close references are retrieved from the embedding space.
+- **PCA and t-SNE visualizations**: used to inspect the projected structure of article and reference embeddings.
+- **Downstream logistic regression**: used as a lightweight sanity check for target signal.
+
+The cosine-similarity analysis confirmed that positive citation pairs are, on average, more semantically similar than negative pairs:
+
+| Embedding set | Mean cosine, invalid pairs | Mean cosine, valid pairs | Downstream ROC-AUC |
+|---------------|----------------------------|--------------------------|--------------------|
+| 64D | 0.2976 | 0.3392 | 0.5785 |
+| 128D | 0.2144 | 0.2463 | 0.5847 |
+
+These standalone checks show that textual similarity alone is not sufficient to perfectly solve the citation task, but it provides a useful signal. This is confirmed later in the model results, where textual embeddings substantially outperform the initial metadata-only features, especially with Transformer and XGBoost models.
+
 ### 5.3 Graph Features
 
 #### **Network Construction**
@@ -362,7 +419,45 @@ The extracted graph features are divided into three main categories based on the
 $$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
 
 ### 5.4 Mix features
-all features. TODO
+The mixed feature pipeline combines the three complementary representations created in the previous sections:
+
+- **Normal features**: structured metadata, encoded categorical variables, numerical counts and derived paper-level attributes.
+- **Graph features**: citation-network topology, node importance, neighborhood overlap and pairwise graph relationships.
+- **Textual features**: dense 64-dimensional article/reference embeddings produced from TF-IDF and TruncatedSVD.
+
+The merge is performed separately for train, validation and test data using the shared key:
+
+```text
+article_id, ref_id, is_reference_valid
+```
+
+This guarantees that all features describe the same article-reference pair and preserve the original binary target.
+
+#### **Redundancy Reduction**
+
+Before merging, the hashed keyword columns from the normal feature set are removed. Keywords are already included in the textual representation, where they contribute to the TF-IDF vocabulary together with title, abstract and author names. Keeping both hashed keywords and textual embeddings would increase dimensionality while duplicating part of the same signal.
+
+The `split` column is treated as metadata and not as a predictive feature.
+
+#### **Final Mixed Dataset**
+
+The resulting mixed datasets are saved as:
+
+| Split | Output file |
+|-------|-------------|
+| Train | `data/combined_features/train.parquet` |
+| Validation | `data/combined_features/val.parquet` |
+| Test | `data/combined_features/test.parquet` |
+
+The purpose of this representation is to test whether combining semantic, structural and metadata-based information improves citation prediction. In practice, the mixed feature experiments did not outperform the graph-based models. This suggests that graph topology already captures the strongest signal for this task, while the additional metadata and textual dimensions increase complexity without adding enough complementary predictive power.
+
+### 5.5 A different approach
+The mixed feature pipeline combines the three complementary representations created in the previous sections:
+
+- `vector_text_article`: concatenation of `title_article`, `abstract_article`, `keywords_article` and, when available, author names.
+- `vector_text_ref`: concatenation of `title_ref`, `abstract_ref`, `keywords_ref` and, when available, author names.
+
+The concatenations are then tokenized using the BERT-tokenizer-fast
 
 ## 6. Models
 By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
