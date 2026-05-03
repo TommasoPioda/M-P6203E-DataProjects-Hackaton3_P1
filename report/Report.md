@@ -365,7 +365,15 @@ The extracted graph features are divided into three main categories based on the
 $$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
 
 ### 6.4 Mix features
-all features. TODO
+The final part consist in combining the features from all three feature engineering methods to give the model a complete view of citation data:
+
+* **Multimodal integration**: we merged in a single dataset the **normal features**, **textual features** and **graph features**. This approach allow the model to learn from both the actual content of the papers and their connections within the network.
+
+* **Managing rendundancy**: While merging the various features together, we removed overlapping features to avoid decrease in the model performances. For example we removed the hashed keywords of the initial features because the textual features contain some more detailed representation of the same information.
+
+* **Data Alignment**: To ensure the data stays consistent, all merges were performed using a left join method on the uniques IDs (`article_id`, `ref_id`) and the target variable (`ìs_reference_valid`). This ensure that train, validation and test sets all have the same structure.
+
+The final dataset will have a total of 301 features.
 
 ## 7. Models
 By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
