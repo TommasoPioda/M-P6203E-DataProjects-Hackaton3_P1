@@ -5,13 +5,14 @@ cured by [Bernacchia Alessia](https://github.com/AlessiaBernacchia), [Pioda Tomm
 ## Table of Contents
 1. [Dataset Overview](#1-dataset-overview)
 2. [Cleaning Pipeline](#2-cleaning-pipeline)
-4. [Splitting into Train, Validation and Test set](#3-splitting-into-train-validation-and-test-set)
-5. [Remaining Data Characteristics & Considerations](#4-remaining-data-characteristics--considerations)
-6. [Feature Engineering](#5-feature-engineering)
-7. [Models](#6-models)
-8. [Comparison](#7-comparison)
-9. [Interpretability](#8-interpretability)
-10. [Conclusions](#9-conclusions)
+3. [Feature Selection](#3-feature-selection)
+4. [Splitting into Train, Validation and Test set](#4-splitting-into-train-validation-and-test-set)
+5. [Remaining Data Characteristics & Considerations](#5-remaining-data-characteristics--considerations)
+6. [Feature Engineering](#6-feature-engineering)
+7. [Models](#7-models)
+8. [Comparison](#8-comparison)
+9. [Interpretability](#9-interpretability)
+10. [Conclusions](#10-conclusions)
 ---
 
 ## 1. Dataset Overview
@@ -195,8 +196,10 @@ Here the complete references of the paper: ['5390879d20f70186a0d43d74', '5390a1e
     Reference ID: 5390879d20f70186a0d43d74, Year: 1984.0	is valid? True
     Reference ID: 5390a1e620f70186a0e59c05, Year: 1985.0	is valid? False
 ```
-### 2.5 Feature Cleaning
-#### Exploration Analysis
+---
+
+## 3. Feature Selection
+### 3.1 Exploration Analysis
 ![publications per year histogram](src/exp_clean%20pubs4year.png)
 
 > Not significant years are deleted. Since we've a huge number of publications we can consider to select only a part of them, but we need to consider the year representation.
@@ -205,7 +208,7 @@ Here the complete references of the paper: ['5390879d20f70186a0d43d74', '5390a1e
 
 > The number of missing values increases after cleaning because empty arrays and invalid values are converted to NaNs. In particular, the features isbn, issue, volume, and issn show a high percentage of missing values (50% or more).
 
-#### Removal of Non-Meaningful Features
+### 3.2 Removal of Non-Meaningful Features
 
 After cleaning, several features were identified as non-essential due to high missing value percentages or limited analytical value:
 
@@ -217,7 +220,7 @@ After cleaning, several features were identified as non-essential due to high mi
 **New derived feature:**
 - **n_pages**: Calculated as `page_end - page_start + 1`, representing paper length which may correlate with citation count
 
-#### Final Feature Set
+### 3.3 Final Feature Set
 
 | Category | Features |
 |----------|----------|
@@ -229,8 +232,8 @@ After cleaning, several features were identified as non-essential due to high mi
 
 ---
 
-## 3. Splitting into Train, Validation and Test set
-### 3.1 Overview of Splitting Strategy
+## 4. Splitting into Train, Validation and Test set
+### 4.1 Overview of Splitting Strategy
 The dataset is split into train, validation, and test sets using a year-weighted, chronological approach to preserve temporal distribution and avoid bias. Only papers from 1971–2024 are considered, as earlier years have sparse data (<50 publications/year), and later years lack sufficient records.
 
 #### Key Steps:
@@ -250,7 +253,7 @@ This method prevents over-representation of sparse years and under-sampling of a
 - Prevents early years (sparse data) from being over-represented
 - Prevents recent years (abundant data) from dominating
 
-### 3.2 Final Split Sizes
+### 4.2 Final Split Sizes
 ![global zear of publication distribution divided by sets](src/split_distr%20years.png)
 ```
 global year range selected: from 1971 to 2014
@@ -267,9 +270,9 @@ min number of years per set: 10
 > The validation and test set has a smaller % of samples on the biggest connected cluster, it makes sense because they cover a smaller temporal range. Usually, to start to be cited, the paper should be published for some years in order to be known.
 ---
 
-## 4. Remaining Data Characteristics & Considerations
+## 5. Remaining Data Characteristics & Considerations
 
-### 4.1 Data Quality Issues & Resolutions
+### 5.1 Data Quality Issues & Resolutions
 
 | Issue | Root Cause | Resolution |
 |-------|-----------|------------|
@@ -281,7 +284,7 @@ min number of years per set: 10
 | **Empty Arrays** | Absent data vs. intentional nulls | Converted to NaN for consistent handling |
 | **Doc_type Inconsistencies** | Multiple case variants, invalid categories | Standardized to lowercase `['conference', 'journal']` |
 
-### 4.2 Known Limitations
+### 5.2 Known Limitations
 
 **Sparse Temporal Coverage:**
 - Years before 1971 have insufficient publication density (<50 papers/year)
@@ -303,9 +306,9 @@ min number of years per set: 10
 - Venue name variations not fully normalized (e.g., "ACM Conference" vs. "ACM SIGMOD")
 - Smaller conferences underrepresented
 
-## 5. Feature Engineering
+## 6. Feature Engineering
 
-### 5.1 Normal Features
+### 6.1 Normal Features
 The normal features pipeline focuses on transforming raw metadata into a model-ready format by handling categorical variables, encoding high-cardinality features, and deriving quantitative insights from structured data. This process ensures compatibility with machine learning algorithms while preserving meaningful information about papers and their references.
 
 #### **Column Filtering**
@@ -459,7 +462,7 @@ The mixed feature pipeline combines the three complementary representations crea
 
 The concatenations are then tokenized using the BERT-tokenizer-fast
 
-## 6. Models
+## 7. Models
 By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
 
 - `BaseModel`: An abstract base class that serves as the blueprint for all architectures. It enforces the implementation of a `preprocess()` method and provides standardized `train_pipeline` and `test_pipeline` methods to maintain consistency across the project.
@@ -476,31 +479,30 @@ We selected these three architectures to capture the citation problem from diffe
 
 - **Simple Transformer**: implemented to capture high-order interactions between metadata fields through an attention mechanism, treating each numerical feature as a "token" to learn deep contextual relationships.
 
-### Key common steps
-1. **Define a Baseline**
-    Before proceeding with hyperparameter optimization, we established a Baseline Model for each architecture using default or heuristically chosen parameters. This step is crucial to:
+### 7.1 Baseline
+Before proceeding with hyperparameter optimization, we established a Baseline Model for each architecture using default or heuristically chosen parameters. This step is crucial to:
 
-    - **Establish a Performance Floor**: Quantify the predictive power of the raw features without fine-tuning.
+- **Establish a Performance Floor**: Quantify the predictive power of the raw features without fine-tuning.
 
-    - **Validate the Pipeline**: Ensure that the data flow—from preprocessing to evaluation—is robust and free of leakage.
+- **Validate the Pipeline**: Ensure that the data flow—from preprocessing to evaluation—is robust and free of leakage.
 
-    - **Benchmark Gains**: Measure the actual "value add" of the subsequent hypertuning phase.
+- **Benchmark Gains**: Measure the actual "value add" of the subsequent hypertuning phase.
 
-2. **Hypertuning**
-    Given the large scale of the dataset and the high dimensionality of the features, we employed distinct tuning strategies tailored to each algorithm's computational requirements:
+### 7.2 Hypertuning
+Given the large scale of the dataset and the high dimensionality of the features, we employed distinct tuning strategies tailored to each algorithm's computational requirements:
 
-    * **XGBoost $\rightarrow$ Randomized Search**: Performing an exhaustive grid search for XGBoost is computationally prohibitive. We utilized `RandomizedSearchCV` to sample a fixed number of parameter settings from specified distributions. This allowed us to efficiently explore key hyperparameters, such as learning rate, tree depth, and regularization, finding optimal solutions in a fraction of the time. We used a **2-fold cross-validation** approach on a controlled subset to manage the memory footprint, which is critical for GPU-accelerated training on Windows systems.
+* **XGBoost $\rightarrow$ Randomized Search**: Performing an exhaustive grid search for XGBoost is computationally prohibitive. We utilized `RandomizedSearchCV` to sample a fixed number of parameter settings from specified distributions. This allowed us to efficiently explore key hyperparameters, such as learning rate, tree depth, and regularization, finding optimal solutions in a fraction of the time. We used a **2-fold cross-validation** approach on a controlled subset to manage the memory footprint, which is critical for GPU-accelerated training on Windows systems.
 
-    * **KNN $\rightarrow$ Grid Search with Predefined Splits**: KNN is particularly sensitive to distance metrics and neighbor counts. To optimize performance, we performed `GridSearchCV` on a representative subset of the records. To prevent data leakage and ensure the model was tuned on the exact distribution intended for validation, we used a `PredefinedSplit` strategy. This manually specifies training and validation folds rather than using standard randomized K-fold splits.
+* **KNN $\rightarrow$ Grid Search with Predefined Splits**: KNN is particularly sensitive to distance metrics and neighbor counts. To optimize performance, we performed `GridSearchCV` on a representative subset of the records. To prevent data leakage and ensure the model was tuned on the exact distribution intended for validation, we used a `PredefinedSplit` strategy. This manually specifies training and validation folds rather than using standard randomized K-fold splits.
 
-3. **Final Evaluation**
-    Once the optimal hyperparameters (e.g., number of neighbors, weight functions, or tree depth) were identified, each model was retrained on the full training set. We assessed performance using a comprehensive suite of metrics:
+### 7.3 Final Evaluation
+Once the optimal hyperparameters (e.g., number of neighbors, weight functions, or tree depth) were identified, each model was retrained on the full training set. We assessed performance using a comprehensive suite of metrics:
 
-    - **Weighted F1-Score**: Our primary metric, chosen to account for any slight imbalances in the class distribution.
+- **Weighted F1-Score**: Our primary metric, chosen to account for any slight imbalances in the class distribution.
 
-    - **Confusion Matrix**: Utilized to visualize and differentiate between Type I (false positives) and Type II (false negatives) errors.
+- **Confusion Matrix**: Utilized to visualize and differentiate between Type I (false positives) and Type II (false negatives) errors.
 
-    - **Classification Report**: Used to evaluate precision, recall, and accuracy at a granular level, ensuring the model performs consistently across both valid and invalid citation pairs.
+- **Classification Report**: Used to evaluate precision, recall, and accuracy at a granular level, ensuring the model performs consistently across both valid and invalid citation pairs.
 
 The project compares three model families across five feature sets:
 
@@ -512,7 +514,7 @@ The project compares three model families across five feature sets:
 
 All models use the same binary target, `is_reference_valid`, and the same chronological train/validation/test logic described in [Section 4](#4-splitting-into-train-validation-and-test-set). The final evaluation focuses on held-out test performance. Some KNN experiments were evaluated on smaller test samples because full KNN inference is expensive on millions of pairwise examples.
 
-### 6.1 KNN
+### 7.1 KNN
 
 KNN is used as an instance-based baseline. Features are scaled with `RobustScaler`, and hyperparameter tuning is performed with `GridSearchCV` on a representative train/validation subset using a `PredefinedSplit`.
 
@@ -526,7 +528,7 @@ KNN is used as an instance-based baseline. Features are scaled with `RobustScale
 
 The graph-based KNN result is the strongest KNN configuration, although it is measured on a smaller test sample. Textual embeddings, especially the 64-dimensional version, provide a substantially stronger signal than the initial metadata features.
 
-### 6.2 XGBoost
+### 7.2 XGBoost
 
 XGBoost is used as the main tree-based model. The pipeline applies the same feature cleaning and scaling interface as the other models, then tunes the estimator with `RandomizedSearchCV` to keep the search feasible on large datasets.
 
@@ -540,7 +542,7 @@ XGBoost is used as the main tree-based model. The pipeline applies the same feat
 
 Graph features clearly produce the best XGBoost result. Textual embeddings remain useful, with the 128-dimensional representation slightly outperforming the 64-dimensional version.
 
-### 6.3 Transformer Models
+### 7.3 Transformer Models
 
 Two Transformer variants are used:
 
@@ -557,7 +559,7 @@ Two Transformer variants are used:
 
 The initial-feature Transformer does not generalize well, while the graph-feature Transformer and the 128-dimensional embedding Transformer are competitive. The best overall Transformer test result is obtained with graph features.
 
-## 7. Comparison
+## 8. Comparison
 
 The model comparison shows a consistent pattern: graph features are the strongest representation for citation validity prediction. They capture direct structural information about citation behavior, such as node importance, neighborhood overlap, and pairwise graph relationships.
 
@@ -572,11 +574,11 @@ The model comparison shows a consistent pattern: graph features are the stronges
 
 The strongest final candidate is **XGBoost on graph features**, because it achieves the highest weighted F1 on the full test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
 
-## 8. Interpretability
+## 9. Interpretability
 To explain the behavior of the different models, we mainly rely on two explainability methods: **SHAP** and **LIME**.
 
 For the KNN model, since it is a **non-linear** and **instance-based** method, we use LIME because its predictions depend strongly on **local neighborhoods**, making local surrogate explanations more appropriate.
 
 For XGBoost, instead, we rely on SHAP. This is because SHAP is particularly well-suited for **tree-based models**, as it can efficiently compute exact or consistent feature contributions. Moreover, SHAP provides both global and local interpretability, allowing us to understand not only individual predictions but also the overall behavior of the model.
 
-## 9. Conclusions
+## 10. Conclusions
