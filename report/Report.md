@@ -558,7 +558,7 @@ To provide a multi-faceted view of model performance, we evaluated the candidate
 - **F1-Score**: The harmonic mean of Precision and Recall, serving as our primary balanced metric for overall performance.
 
 ### Comparison Heatmap
-![Metrics comparison over all models.](src/eval_global_metrics.png)
+![Metrics comparison over all models.](src/global_stats_heatmap.png)
 
 The model comparison shows a consistent pattern: combined features are the strongest representation for citation validity prediction. They capture a global and complete representation of citation behavior by synthesizing structured metadata, topological network importance, and deep semantic relationships. This integration allows the models to reconcile general paper characteristics with local graph connectivity and the thematic similarity found in textual embeddings. Consequently, the models move beyond simple metadata lookups to understand the multidimensional context of why one paper refers to another.
 
