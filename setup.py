@@ -1,10 +1,10 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="m_p6203e_data_projects_hackathon",
+    name="data_projects_hackathon",
     version="0.1.0",
     description="Utilities and preprocessing code for the Hackathon 3 project.",
-    author="TINEXT SA",
+    author="Alessia Bernacchia, Tommaso Pioda, Giacomo Villani",
     author_email="",
     python_requires=">=3.11",
     packages=find_packages(include=["utils", "utils.*"]),
