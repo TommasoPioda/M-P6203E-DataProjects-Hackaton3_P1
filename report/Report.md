@@ -550,19 +550,21 @@ The Combined (Mixed) models provide the most comprehensive representation by mer
 
 > The combined approach yields the most robust results by balancing general metadata with deep structural and semantic information.
 ## 8.5 Global Comparison
+### Why these metrics?
+To provide a multi-faceted view of model performance, we evaluated the candidates using the following metrics:
+- **Precision**: Measures the accuracy of positive predictions, crucial for ensuring that predicted citations are truly valid.  
+- **Recall**: Measures the ability to find all actual valid citations, ensuring the model doesn't miss relevant references.  
+- **Accuracy**: Provides the overall percentage of correct predictions across both valid and invalid classes.  
+- **F1-Score**: The harmonic mean of Precision and Recall, serving as our primary balanced metric for overall performance.
 
-The model comparison shows a consistent pattern: graph features are the strongest representation for citation validity prediction. They capture direct structural information about citation behavior, such as node importance, neighborhood overlap, and pairwise graph relationships.
+### Comparison Heatmap
+![Metrics comparison over all models.](src/eval_global_metrics.png)
 
-| Rank | Model | Feature set | Test accuracy | Test weighted F1 |
-|------|-------|-------------|---------------|------------------|
-| 1 | XGBoost | Graph features | 0.9008 | 0.9008 |
-| 2 | Transformer | Graph features | 0.8971 | 0.8961 |
-| 3 | Transformer | Textual embeddings 128 | 0.8618 | 0.8618 |
-| 4 | Transformer | Textual embeddings 64 | 0.8433 | 0.8431 |
-| 5 | XGBoost | Textual embeddings 128 | 0.8425 | 0.8424 |
-| 6 | XGBoost | Textual embeddings 64 | 0.8387 | 0.8387 |
+The model comparison shows a consistent pattern: combined features are the strongest representation for citation validity prediction. They capture a global and complete representation of citation behavior by synthesizing structured metadata, topological network importance, and deep semantic relationships. This integration allows the models to reconcile general paper characteristics with local graph connectivity and the thematic similarity found in textual embeddings. Consequently, the models move beyond simple metadata lookups to understand the multidimensional context of why one paper refers to another.
 
-The strongest final candidate is **XGBoost on graph features**, because it achieves the highest weighted F1 on the full test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
+The strongest final candidate is **XGBoost on combined features**, because it achieves the highest metrics on the test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
+
+> For the next step interpretability [Section 9](#9-interpretability) we will analyze the best-performing models from the Normal, Graph, and Textual categories. Furthermore, to derive deeper insights into the synergy between different feature types, we will conduct a detailed comparative analysis of all models within the Combined Features category.
 
 ## 9. Interpretability
 To explain the behavior of the different models, we mainly rely on two explainability methods: **SHAP** and **LIME**.
