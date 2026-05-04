@@ -11,11 +11,10 @@ except ImportError:
     PreTrainedModel, PreTrainedTokenizer = None, None
 
 class LocalModelRegistry:
-    """Un Model Registry locale che salva gli esperimenti in modo ordinato."""
+    """Local model registry that stores experiments in an organized layout."""
     def __init__(self, registry_base_path: str = None):
         if registry_base_path is None:
-            # "models/" è la cartella raccomandata per ignorare da git
-            # Salvataggio allo stesso livello di notebooks 
+            # Store artifacts at the project root, next to the notebooks folder.
             PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
             self.base_path = PROJECT_ROOT / "Models" / "embedding_based"
         else:
@@ -66,5 +65,5 @@ class LocalModelRegistry:
         else:
             joblib.dump(model, run_dir / "model.joblib")
             
-        print(f"✅ Artefatto modello salvato con successo in: {run_dir}")
+        print(f"Model artifact saved successfully in: {run_dir}")
         return run_dir
