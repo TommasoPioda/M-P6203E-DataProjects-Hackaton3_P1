@@ -332,7 +332,7 @@ The features `n_keywords_article`, `n_keywords_ref`, `n_authors_article` and `n_
 
 The normal features pipeline successfully produced **56 completely usable features** across all train, validation, and test datasets. These features combine numeric metadata (citation counts, publication years, page counts), encoded categorical information (document types, languages), and semantic representations (hashed keywords and author collaboration scale), providing a comprehensive numerical representation suitable for classification tasks like citation prediction.
 
-### 5.2 Textual Features
+### 6.2 Textual Features
 The textual feature pipeline is designed to capture semantic similarity between the citing article and the candidate reference. While the normal feature set keeps structured metadata and the graph feature set models citation topology, this pipeline focuses on the information contained in titles, abstracts, keywords and author names.
 
 #### **Text Construction**
@@ -391,7 +391,7 @@ The cosine-similarity analysis confirmed that positive citation pairs are, on av
 
 These standalone checks show that textual similarity alone is not sufficient to perfectly solve the citation task, but it provides a useful signal. This is confirmed later in the model results, where textual embeddings substantially outperform the initial metadata-only features, especially with Transformer and XGBoost models.
 
-### 5.3 Graph Features
+### 6.3 Graph Features
 
 #### **Network Construction**
 
@@ -422,7 +422,7 @@ The extracted graph features are divided into three main categories based on the
 
 $$J(A, B) = \frac{|N(A) \cap N(B)|}{|N(A) \cup N(B)|}$$
 
-### 5.4 Mix features
+### 6.4 Mix features
 The mixed feature pipeline combines the three complementary representations created in the previous sections:
 
 - **Normal features**: structured metadata, encoded categorical variables, numerical counts and derived paper-level attributes.
@@ -453,15 +453,15 @@ The resulting mixed datasets are saved as:
 | Validation | `data/combined_features/val.parquet` |
 | Test | `data/combined_features/test.parquet` |
 
-The purpose of this representation is to test whether combining semantic, structural and metadata-based information improves citation prediction. In practice, the mixed feature experiments did not outperform the graph-based models. This suggests that graph topology already captures the strongest signal for this task, while the additional metadata and textual dimensions increase complexity without adding enough complementary predictive power.
+The purpose of this representation is to test whether combining semantic, structural and metadata-based information improves citation prediction. In practice, the mixed feature experiments did not outperform the graph-based models. This suggests that graph topology already captures the strongest signal for this task, while the additional metadata and textual dimensions increase complexity without adding enough complementary predictive power. In conclusion we have a three new datasets with 301 features.
 
-### 5.5 A different approach
+### 6.5 A different approach
 The mixed feature pipeline combines the three complementary representations created in the previous sections:
 
 - `vector_text_article`: concatenation of `title_article`, `abstract_article`, `keywords_article` and, when available, author names.
 - `vector_text_ref`: concatenation of `title_ref`, `abstract_ref`, `keywords_ref` and, when available, author names.
 
-The concatenations are then tokenized using the BERT-tokenizer-fast
+The concatenations are then tokenized using the BERT-tokenizer-fast.
 
 ## 7. Models
 By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
@@ -513,67 +513,59 @@ The project compares three model families across five feature sets:
 - **Graph features**: structural citation-network features.
 - **Mixed features**: combined feature table used as an additional experiment.
 
-All models use the same binary target, `is_reference_valid`, and the same chronological train/validation/test logic described in [Section 4](#4-splitting-into-train-validation-and-test-set). The final evaluation focuses on held-out test performance. Some KNN experiments were evaluated on smaller test samples because full KNN inference is expensive on millions of pairwise examples.
+All models use the same binary target, `is_reference_valid`, and the same chronological train/validation/test logic described in [Section 4](#4-splitting-into-train-validation-and-test-set). The final evaluation focuses on held-out test performance. The models were evaluated on smaller train/test samples randomly sampled because full inference is expensive on millions of pairwise examples.
 
-### 7.1 KNN
+## 8 Comparison
+The performance of the models was evaluated across different feature sets to determine the most effective representation for citation prediction. The results indicate a clear hierarchy in the predictive power of the data, with structural and semantic information significantly outperforming basic metadata.
 
-KNN is used as an instance-based baseline. Features are scaled with `RobustScaler`, and hyperparameter tuning is performed with `GridSearchCV` on a representative train/validation subset using a `PredefinedSplit`.
+### 8.1 Normal (initial) features comparison
+The models trained on Normal (Initial) features represent the performance baseline. As expected, this feature set achieves the lowest overall scores due to the sparse and less significant nature of basic metadata for predicting specific citations.
+![Models on normal (initial) fetures comparison](src/eval_models_normal.png)
+* **KNN**: Exhibits severe overfitting. While it performs near-perfectly on the training set, its performance drops drastically on the test set, failing to generalize.
+* **XGBoost**: Performs better than KNN by avoiding extreme overfitting, but remains limited by the data, with Accuracy and F1-scores stagnating around 0.6.
+* **Transformer**: Shows the weakest performance in this category. In the test set, the model tends to collapse, predominantly predicting the majority class (0), indicating it could not find a meaningful signal in these features.
+### 8.2 Graph features comparison
+The transition to Graph features marks a significant improvement, with test metrics rising to approximately 0.9. This indicates that topological information is vital for capturing reference patterns.
+![Models on initial features comparison](src/eval_models_graph.png)
+* **KNN**: Similar to the initial features, KNN continues to show a tendency toward overfitting.
+* **XGBoost & Transformer**: Both models train effectively. While the confusion matrices show a higher number of misclassifications compared to the training phase, the errors are not significant enough to suggest underfitting.
 
-| Feature set | Best configuration | Test size | Accuracy | Weighted F1 |
-|-------------|--------------------|-----------|----------|-------------|
-| Initial features | `n_neighbors=15`, `metric=manhattan` | 10,000 | 0.5679 | 0.5653 |
-| Textual embeddings 64 | `n_neighbors=12`, `metric=manhattan` | 10,000 | 0.7675 | 0.7673 |
-| Textual embeddings 128 | `n_neighbors=12`, `metric=manhattan` | 10,000 | 0.7335 | 0.7326 |
-| Graph features | `n_neighbors=12`, `metric=euclidean` | 1,000 | 0.8150 | 0.8147 |
-| Mixed features | `n_neighbors=15`, `metric=manhattan` | 10,000 | 0.5679 | 0.5653 |
+> The vast improvement over initial features confirms that network-level information (like PageRank and neighborhood overlap) captures the "context" of a citation. However, the fact that KNN still struggles suggests that simply having similar local network structures does not guarantee that two papers will cite the same references.
 
-The graph-based KNN result is the strongest KNN configuration, although it is measured on a smaller test sample. Textual embeddings, especially the 64-dimensional version, provide a substantially stronger signal than the initial metadata features.
+### 8.3 Textual features comparison
+The Textual features (64 and 128 dimensions) show a performance profile similar to the graph features, reaching scores near 0.9 on the test set.
 
-### 7.2 XGBoost
+![Models on textual (64 vect embedding) features comparison](src/eval_models_textual_64.png)
 
-XGBoost is used as the main tree-based model. The pipeline applies the same feature cleaning and scaling interface as the other models, then tunes the estimator with `RandomizedSearchCV` to keep the search feasible on large datasets.
+![Models on textual (128 vect embedding) features comparison](src/eval_models_textual_128.png)
 
-| Feature set | Test size | Accuracy | Weighted F1 |
-|-------------|-----------|----------|-------------|
-| Initial features | 396,382 | 0.5840 | 0.5835 |
-| Textual embeddings 64 | 396,380 | 0.8387 | 0.8387 |
-| Textual embeddings 128 | 396,380 | 0.8425 | 0.8424 |
-| Graph features | 396,382 | 0.9008 | 0.9008 |
-| Mixed features | 396,382 | 0.5840 | 0.5835 |
+* **KNN**: Unlike in previous sets, KNN performs well here. This is likely because the embeddings successfully capture the semantics of the papers: papers sharing a similar research topic are much more likely to cite one another, making distance-based prediction more reliable.
+* **XGBoost & Transformer**: Both architectures achieve high metrics on the test set, proving that semantic similarity is a powerful predictor for citation validity.
 
-Graph features clearly produce the best XGBoost result. Textual embeddings remain useful, with the 128-dimensional representation slightly outperforming the 64-dimensional version.
+### 8.4 Combined features comparison
+The Combined (Mixed) models provide the most comprehensive representation by merging metadata, graph topology, and 64D semantic embeddings.
+![Models on combined features comparison](src/eval_models_combined.png)
+* **KNN**: Demonstrates improved stability compared to the initial features set, as the inclusion of semantic embeddings helps the model identify meaningful clusters; however, it still exhibits a gap between training and test performance, suggesting a lingering sensitivity to high-dimensional noise.
+* **XGBoost**: Emerges as the top performer in this category. Its ability to handle diverse tabular data allows it to synthesize the different feature types into the most accurate predictive signal.
+* **Transformer**: Although powerful, the Transformer performs slightly worse than XGBoost in this context. This may be due to the increased complexity of the 301-feature input space, where the attention mechanism might require further architectural tuning to outperform the iterative boosting of XGBoost.
 
-### 7.3 Transformer Models
+> The combined approach yields the most robust results by balancing general metadata with deep structural and semantic information.
+## 8.5 Global Comparison
+### Why these metrics?
+To provide a multi-faceted view of model performance, we evaluated the candidates using the following metrics:
+- **Precision**: Measures the accuracy of positive predictions, crucial for ensuring that predicted citations are truly valid.  
+- **Recall**: Measures the ability to find all actual valid citations, ensuring the model doesn't miss relevant references.  
+- **Accuracy**: Provides the overall percentage of correct predictions across both valid and invalid classes.  
+- **F1-Score**: The harmonic mean of Precision and Recall, serving as our primary balanced metric for overall performance.
 
-Two Transformer variants are used:
+### Comparison Heatmap
+![Metrics comparison over all models.](src/global_stats_heatmap.png)
 
-- **SimpleTransformer** for scalar tabular features, where each feature is treated as a token-like input.
-- **PairEmbeddingTransformerModel** for textual embeddings, where article and reference embeddings are modeled jointly.
+The model comparison shows a consistent pattern: combined features are the strongest representation for citation validity prediction. They capture a global and complete representation of citation behavior by synthesizing structured metadata, topological network importance, and deep semantic relationships. This integration allows the models to reconcile general paper characteristics with local graph connectivity and the thematic similarity found in textual embeddings. Consequently, the models move beyond simple metadata lookups to understand the multidimensional context of why one paper refers to another.
 
-| Feature set | Best validation weighted F1 | Test size | Test accuracy | Test weighted F1 |
-|-------------|-----------------------------|-----------|---------------|------------------|
-| Initial features | 0.3917 | 396,382 | 0.4991 | 0.3343 |
-| Textual embeddings 64 | 0.8826 | 396,380 | 0.8433 | 0.8431 |
-| Textual embeddings 128 | 0.8974 | 396,380 | 0.8618 | 0.8618 |
-| Graph features | 0.8874 | 396,382 | 0.8971 | 0.8961 |
-| Different approach | 0.9367 on a 5,000-sample validation subset | - | - | - |
+The strongest final candidate is **XGBoost on combined features**, because it achieves the highest metrics on the test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
 
-The initial-feature Transformer does not generalize well, while the graph-feature Transformer and the 128-dimensional embedding Transformer are competitive. The best overall Transformer test result is obtained with graph features.
-
-## 8. Comparison
-
-The model comparison shows a consistent pattern: graph features are the strongest representation for citation validity prediction. They capture direct structural information about citation behavior, such as node importance, neighborhood overlap, and pairwise graph relationships.
-
-| Rank | Model | Feature set | Test accuracy | Test weighted F1 |
-|------|-------|-------------|---------------|------------------|
-| 1 | XGBoost | Graph features | 0.9008 | 0.9008 |
-| 2 | Transformer | Graph features | 0.8971 | 0.8961 |
-| 3 | Transformer | Textual embeddings 128 | 0.8618 | 0.8618 |
-| 4 | Transformer | Textual embeddings 64 | 0.8433 | 0.8431 |
-| 5 | XGBoost | Textual embeddings 128 | 0.8425 | 0.8424 |
-| 6 | XGBoost | Textual embeddings 64 | 0.8387 | 0.8387 |
-
-The strongest final candidate is **XGBoost on graph features**, because it achieves the highest weighted F1 on the full test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
+> For the next step interpretability [Section 9](#9-interpretability) we will analyze the best-performing models from the Normal, Graph, and Textual categories. Furthermore, to derive deeper insights into the synergy between different feature types, we will conduct a detailed comparative analysis of all models within the Combined Features category.
 
 ## 9. Interpretability
 To explain the behavior of the different models, we mainly rely on two explainability methods: **SHAP** and **LIME**.
