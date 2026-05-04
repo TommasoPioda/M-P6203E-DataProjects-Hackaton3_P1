@@ -12,7 +12,8 @@ cured by [Bernacchia Alessia](https://github.com/AlessiaBernacchia), [Pioda Tomm
 7. [Models](#7-models)
 8. [Comparison](#8-comparison)
 9. [Interpretability](#9-interpretability)
-10. [Conclusions](#10-conclusions)
+10. [Next Steps](#10-possible-next-steps)
+11. [Conclusions](#11-conclusions)
 ---
 
 ## 1. Dataset Overview
@@ -581,4 +582,20 @@ For the KNN model, since it is a **non-linear** and **instance-based** method, w
 
 For XGBoost, instead, we rely on SHAP. This is because SHAP is particularly well-suited for **tree-based models**, as it can efficiently compute exact or consistent feature contributions. Moreover, SHAP provides both global and local interpretability, allowing us to understand not only individual predictions but also the overall behavior of the model.
 
-## 10. Conclusions
+## 10. Possible Next Steps
+### Evaluation on a Non-Balanced Test Set
+The current citation prediction task is framed as a _balanced classification problem_. However, in a real-world scenario, the number of potential papers an author could cite (the negatives, where `is_reference_valid` = 0) vastly outnumbers the few they actually cite (the positives, where `is_reference_valid` = 1). While we began generating exhaustive negative samples to mirror a true inference case, the resulting dataset scale exceeded our hardware's memory and storage capacities.
+
+Future work should involve evaluating the models on an **unbalanced distribution to assess precision-recall trade-offs** in a production-like environment.  
+
+### Completion of Global SHAP Explanations
+Interpretability is key to understanding model decisions. We initiated transformer global explanations in `notebooks/explainability/explainability.ipynb` using `KernelExplainer`; however, due to high computational overhead and time constraints, we were unable to generate the full global summary plots. 
+
+Completing this analysis would provide a comprehensive view of which features consistently drive citation predictions across the entire dataset.  
+
+### Feature Tokenization via BERT
+We began exploring an alternative embedding strategy that leverages the `BERT` (Bidirectional Encoder Representations from Transformers) architecture. Unlike our current approach of feeding numerical features into a custom Transformer, this method involves tokenizing metadata and text fields directly through a pretrained **BERT tokenizer**. 
+
+This could drastically improve performance, as the model could learn deeper semantic and contextual nuances within the scientific text that standard TF-IDF and hashing methods might overlook. 
+
+## 11. Conclusions
