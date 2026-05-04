@@ -626,17 +626,25 @@ The strongest final candidate is **XGBoost on combined features**, because it ac
 > For the next step interpretability [Section 9](#9-interpretability) we will analyze the best-performing models from the Normal, Graph, and Textual categories. Furthermore, to derive deeper insights into the synergy between different feature types, we will conduct a detailed comparative analysis of all models within the Combined Features category.
 
 ## 9. Interpretability
-To demystify the decision-making processes of our models, we employ two primary explainability frameworks: SHAP (SHapley Additive exPlanations) and LIME (Local Interpretable Model-agnostic Explanations).
+To demystify the decision-making processes of our models, we employ two primary explainability frameworks: **SHAP (SHapley Additive exPlanations)** and **LIME (Local Interpretable Model-agnostic Explanations)**.
 
-For the K-Nearest Neighbors (KNN) model, we utilize LIME. As an instance-based, non-linear method, KNN's predictions are highly dependent on local data neighborhoods. LIME is particularly effective here as it creates local surrogate models that approximate the decision boundary around a specific point, providing a faithful representation of how neighboring instances influence the classification.
+For the _K-Nearest Neighbors (KNN) model, we utilize LIME_. As an instance-based, non-linear method, KNN's predictions are highly dependent on local data neighborhoods. LIME is particularly effective here as it creates local surrogate models that approximate the decision boundary around a specific point, providing a faithful representation of how neighboring instances influence the classification.
 
-Conversely, we rely on SHAP for the XGBoost models. SHAP is mathematically optimized for tree-based ensembles, allowing for the efficient calculation of exact feature contributions. A key advantage of SHAP is its dual nature: it provides local explanations for individual predictions while simultaneously offering a global overview of feature importance, revealing the general logic the model has internalized.
+Conversely, we rely on _SHAP for the XGBoost models_. SHAP is mathematically optimized for tree-based ensembles, allowing for the efficient calculation of exact feature contributions. A key advantage of SHAP is its dual nature: it provides local explanations for individual predictions while simultaneously offering a global overview of feature importance, revealing the general logic the model has internalized.
 
-Our analytical strategy involved explaining the best-performing model for each feature group (Initial, Textual, and Graph). However, for the Combined (Mix) features, we chose to analyze all three models to investigate the synergies and correlations between different feature types. Finally, since we tried to implement global SHAP explanations for our Transformer-based models using a Kernel explainer without any success, we standardized our comparison using local predictions. By applying LIME across all architectures, we established a consistent benchmark to evaluate and compare feature influence at the instance level.
+Our analytical strategy involved **explaining the best-performing model for each feature group (Initial, Textual, and Graph)**. However, for the **Combined (Mix) features, we chose to analyze all three models** to investigate the synergies and correlations between different feature types. 
+
+Finally, since we tried to implement global SHAP explanations for our **Transformer-based** models using a `Kernel explainer` without any success, we standardized our comparison ***using local predictions**. By applying LIME across all architectures, we established a consistent benchmark to evaluate and compare feature influence at the instance level.
 
 > for a detailed explanation of the results found, i suggest to read the comments at the end of each group of features, in `explainability.ipynb`.
 
 In conclusion, the most significant features identified throughout this study belong to the graph-based category. Given that the problem is essentially a link prediction task, the structural properties derived from the citation network prove to be the most informative. These features, generated from the intricate connections between papers, allow the models to effectively extrapolate key patterns regarding the validity of a reference. Ultimately, the topological context of the network provides a far more robust signal for classification than initial metadata or textual embeddings alone.
+
+### Interpret the XGBoost on Combined features
+![XGBoost for Combined features, feature importance](src/inter_xgb_comb_feat_imp.png)
+
+![XGBoost for Combined features, SHAP value importance](src/inter_xgb_comb_SHAP.png)
+
 
 
 
