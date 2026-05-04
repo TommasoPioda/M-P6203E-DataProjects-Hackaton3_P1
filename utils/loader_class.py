@@ -236,7 +236,7 @@ class DBLP_Loader:
         for col in self.array_of_dict_columns:
             if col in data.columns:
                 if col == 'authors':
-                    # Definiamo i campi fissi dello struct per gli autori
+                    # Define the fixed struct fields for authors
                     author_struct = pa.struct([
                         pa.field('id', pa.string()),
                         pa.field('name', pa.string()),
