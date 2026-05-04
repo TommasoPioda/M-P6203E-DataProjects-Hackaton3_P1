@@ -455,13 +455,71 @@ The resulting mixed datasets are saved as:
 
 The purpose of this representation is to test whether combining semantic, structural and metadata-based information improves citation prediction. In practice, the mixed feature experiments did not outperform the graph-based models. This suggests that graph topology already captures the strongest signal for this task, while the additional metadata and textual dimensions increase complexity without adding enough complementary predictive power. In conclusion we have a three new datasets with 301 features.
 
-### 6.5 A different approach
-The mixed feature pipeline combines the three complementary representations created in the previous sections:
+### 6.5 A Different Approach: BERT Sequence Classification
 
-- `vector_text_article`: concatenation of `title_article`, `abstract_article`, `keywords_article` and, when available, author names.
-- `vector_text_ref`: concatenation of `title_ref`, `abstract_ref`, `keywords_ref` and, when available, author names.
+Unlike the tabular and embedding-based approaches described above, this section explores **end-to-end deep learning on raw textual data** using BERT (Bidirectional Encoder Representations from Transformers) for direct citation validity prediction.
 
-The concatenations are then tokenized using the BERT-tokenizer-fast.
+#### **Overview**
+
+The notebook `notebooks/models/different_approach/Transformer.ipynb` implements a `BertForSequenceClassification` model fine-tuned on exploded citation pairs. Rather than extracting features offline and feeding them to downstream models, this approach tokenizes the concatenated textual fields directly and learns representations end-to-end.
+
+#### **Data Preparation**
+
+For each article-reference pair, two textual fields are constructed:
+
+- `vector_text_article`: concatenation of `title_article`, `abstract_article`, `keywords_article` and author names (when available).
+- `vector_text_ref`: concatenation of `title_ref`, `abstract_ref`, `keywords_ref` and author names (when available).
+
+Missing textual values are replaced with empty strings to ensure stable tokenization. The texts are then tokenized jointly using `BertTokenizerFast` with a maximum sequence length of 128 tokens, producing input token IDs and attention masks compatible with BERT.
+
+#### **Model Architecture**
+
+- **Base Model**: `bert-base-uncased` (pre-trained on English Wikipedia and BookCorpus)
+- **Task Head**: `BertForSequenceClassification` with `num_labels=1` for binary classification (valid vs. invalid citation)
+- **Training Objective**: Weighted binary cross-entropy loss, where positive (valid) citations are upweighted to account for class imbalance
+
+The weighted loss is computed using a positive weight derived from the class distribution in the training set:
+
+$$\text{pos\_weight} = \frac{\text{count of negative examples}}{\text{count of positive examples}}$$
+
+#### **Training Configuration**
+
+- **Optimizer**: AdamW with default parameters
+- **Learning Rate**: 2e-5 (typical for BERT fine-tuning)
+- **Batch Size**: 96 (per-device training), 64 (per-device evaluation)
+- **Epochs**: 1 (given the large dataset size)
+- **Regularization**: Weight decay of 0.01
+- **Callbacks**: `PlotLossCallback` for real-time loss tracking; `WeightedTrainer` for loss weighting
+
+#### **Key Features**
+
+- **Checkpoint Resumption**: Automatically detects and resumes from the latest checkpoint if training is interrupted
+- **Early Stopping Ready**: Validation metrics monitored for potential early stopping in extended experiments
+- **Memory Efficiency**: GPU acceleration with CUDA auto-detection and memory cleanup between batches
+
+#### **Validation & Evaluation**
+
+After training, the model is evaluated on a validation subset (up to 5,000 samples for computational efficiency):
+
+- **Confusion Matrix**: Visualizes true positive, true negative, false positive, and false negative predictions
+- **Classification Metrics**: Accuracy, Precision, Recall, F1-Score
+- **Rolling Accuracy Analysis**: Divides validation data into blocks (default: 500 samples per block) and computes accuracy distributions to assess model stability across different data regions
+
+#### **Outputs**
+
+- **Saved Model**: Checkpoint of the fine-tuned BERT model with tokenizer, stored in `Models/` directory
+- **Loss Plots**: Training and validation loss curves tracked via `PlotLossCallback`
+- **Validation Metrics**: Confusion matrix and per-class metrics on validation set
+- **Rolling Accuracy Distribution**: Histogram of accuracy scores across validation blocks
+
+#### **Rationale**
+
+This approach differs from tabular and pre-computed embedding methods by:
+1. **Learning representations jointly**: Instead of using static TF-IDF or pre-trained embeddings, BERT learns task-specific contextual representations during fine-tuning.
+2. **Capturing long-range dependencies**: BERT's bidirectional attention can model relationships between distant words in titles, abstracts, and keywords.
+3. **Leveraging transfer learning**: Pre-trained BERT weights contain linguistic knowledge that transfers well to the citation validity task with minimal fine-tuning.
+
+However, this approach also introduces computational overhead and requires GPU resources for practical training speeds on large datasets.
 
 ## 7. Models
 By leveraging structured paper metadata and citation network features, we treat citation validity as a **supervised learning task**. To ensure code quality, modularity, and reusability across different experiments, we implemented a custom class hierarchy:
@@ -586,7 +644,7 @@ Interpretability is key to understanding model decisions. We initiated transform
 Completing this analysis would provide a comprehensive view of which features consistently drive citation predictions across the entire dataset.  
 
 ### Feature Tokenization via BERT
-We began exploring an alternative embedding strategy that leverages the `BERT` (Bidirectional Encoder Representations from Transformers) architecture. Unlike our current approach of feeding numerical features into a custom Transformer, this method involves tokenizing metadata and text fields directly through a pretrained **BERT tokenizer**. 
+We began exploring an alternative embedding strategy that leverages the `BERT` (Bidirectional Encoder Representations from Transformers) architecture (in the file `notebooks/models/different_approach/Tranformer.ipynb`). Unlike our current approach of feeding numerical features into a custom Transformer, this method involves tokenizing metadata and text fields directly through a pretrained **BERT tokenizer**. 
 
 This could drastically improve performance, as the model could learn deeper semantic and contextual nuances within the scientific text that standard TF-IDF and hashing methods might overlook. 
 
