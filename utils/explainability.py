@@ -1,6 +1,8 @@
 from lime.lime_tabular import LimeTabularExplainer
 import shap
 from IPython.display import display, HTML
+import torch
+
 
 def lime_explainer(X_train, X_test, y_test, model):
     """
@@ -74,3 +76,48 @@ def shap_tree_explainer(X_test, model):
 
     # bar plot
     shap.summary_plot(shap_val, X_test, plot_type="bar")
+
+def shap_kernel_explainer(X_train, X_test, model):
+    """
+    Based on test data, it use the SHAP to
+    explain a transformer model globally, showing
+    which features influence positively and negatively
+    the decision.
+    
+    Args:
+        X_test (pd.DataFrame): Dataframe of the train set
+        
+        X_test (pd.DataFrame): Dataframe of the test set
+        
+        model (Transformer): Transformer model trained over the data
+        
+    Plot a summary and a bar plot over the test set    
+    """    
+
+    model.eval()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
+
+    def predict_fn(data_numpy):
+        with torch.no_grad():
+            inputs = torch.tensor(data_numpy).float().to(device)
+            outputs = model(inputs)
+            return torch.sigmoid(outputs).cpu().numpy()
+
+    if device == "cuda":
+        train_data = X_train.iloc[:200]
+        test_data = X_test.iloc[:100]
+    else:
+        train_data = X_train.iloc[:100]
+        test_data = X_test.iloc[:50]
+        
+    explainer = shap.KernelExplainer(predict_fn, train_data.values)
+
+    shap_val = explainer.shap_values(test_data.values)
+
+    # summary plot
+    shap.summary_plot(shap_val, test_data.values)
+    
+    # bar plot
+    shap.summary_plot(shap_val, test_data, plot_type="bar")
+    
