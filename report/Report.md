@@ -623,6 +623,8 @@ The model comparison shows a consistent pattern: combined features are the stron
 
 The strongest final candidate is **XGBoost on combined features**, because it achieves the highest metrics on the test set while remaining easier to interpret with SHAP than the Transformer alternatives. The graph-based Transformer is very close and remains a strong secondary candidate, especially if the goal is to capture non-linear interactions across graph-derived features.
 
+Although XGBoost on combined features achieved the best results in our experiments, a more powerful text-based Transformer model could represent a promising direction for future work. In particular, larger Transformer architectures equipped with domain-specific tokenizers may capture the semantic meaning of citation contexts more effectively than handcrafted or precomputed features. Such models could better understand the nuanced textual relationship between citing and cited papers. However, this approach would likely require substantially higher computational resources, more training data, and careful fine-tuning. Therefore, while XGBoost remains the most practical and interpretable final candidate in this study, larger Transformer-based models may offer stronger long-term potential if computational constraints are relaxed.
+
 > For the next step interpretability [Section 9](#9-interpretability) we will analyze the best-performing models from the Normal, Graph, and Textual categories. Furthermore, to derive deeper insights into the synergy between different feature types, we will conduct a detailed comparative analysis of all models within the Combined Features category.
 
 ## 9. Interpretability
