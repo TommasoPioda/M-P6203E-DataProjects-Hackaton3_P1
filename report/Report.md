@@ -626,11 +626,19 @@ The strongest final candidate is **XGBoost on combined features**, because it ac
 > For the next step interpretability [Section 9](#9-interpretability) we will analyze the best-performing models from the Normal, Graph, and Textual categories. Furthermore, to derive deeper insights into the synergy between different feature types, we will conduct a detailed comparative analysis of all models within the Combined Features category.
 
 ## 9. Interpretability
-To explain the behavior of the different models, we mainly rely on two explainability methods: **SHAP** and **LIME**.
+To demystify the decision-making processes of our models, we employ two primary explainability frameworks: SHAP (SHapley Additive exPlanations) and LIME (Local Interpretable Model-agnostic Explanations).
 
-For the KNN model, since it is a **non-linear** and **instance-based** method, we use LIME because its predictions depend strongly on **local neighborhoods**, making local surrogate explanations more appropriate.
+For the K-Nearest Neighbors (KNN) model, we utilize LIME. As an instance-based, non-linear method, KNN's predictions are highly dependent on local data neighborhoods. LIME is particularly effective here as it creates local surrogate models that approximate the decision boundary around a specific point, providing a faithful representation of how neighboring instances influence the classification.
 
-For XGBoost, instead, we rely on SHAP. This is because SHAP is particularly well-suited for **tree-based models**, as it can efficiently compute exact or consistent feature contributions. Moreover, SHAP provides both global and local interpretability, allowing us to understand not only individual predictions but also the overall behavior of the model.
+Conversely, we rely on SHAP for the XGBoost models. SHAP is mathematically optimized for tree-based ensembles, allowing for the efficient calculation of exact feature contributions. A key advantage of SHAP is its dual nature: it provides local explanations for individual predictions while simultaneously offering a global overview of feature importance, revealing the general logic the model has internalized.
+
+Our analytical strategy involved explaining the best-performing model for each feature group (Initial, Textual, and Graph). However, for the Combined (Mix) features, we chose to analyze all three models to investigate the synergies and correlations between different feature types. Finally, since we tried to implement global SHAP explanations for our Transformer-based models using a Kernel explainer without any success, we standardized our comparison using local predictions. By applying LIME across all architectures, we established a consistent benchmark to evaluate and compare feature influence at the instance level.
+
+> for a detailed explanation of the results found, i suggest to read the comments at the end of each group of features, in `explainability.ipynb`.
+
+In conclusion, the most significant features identified throughout this study belong to the graph-based category. Given that the problem is essentially a link prediction task, the structural properties derived from the citation network prove to be the most informative. These features, generated from the intricate connections between papers, allow the models to effectively extrapolate key patterns regarding the validity of a reference. Ultimately, the topological context of the network provides a far more robust signal for classification than initial metadata or textual embeddings alone.
+
+
 
 ## 10. Possible Next Steps
 ### Evaluation on a Non-Balanced Test Set
@@ -648,4 +656,25 @@ We began exploring an alternative embedding strategy that leverages the `BERT` (
 
 This could drastically improve performance, as the model could learn deeper semantic and contextual nuances within the scientific text that standard TF-IDF and hashing methods might overlook. 
 
+### Deep Learning Approaches in Citation Prediction
+Beyond our current methodology, several state-of-the-art architectures utilize deep learning to solve the citation validity problem by modeling the complex relationships between documents. **Graph Neural Networks (GNNs)**, such as **Graph Convolutional Networks (GCNs)** or **Graph Attention Networks (GATs)**, are frequently employed to learn inductive representations of nodes within a citation network, allowing the model to predict links based on structural topology. 
+
+These models benefit from end-to-end training where both the features and the classification boundary are optimized simultaneously, potentially capturing nuances that manual feature engineering might miss.
+
+### Create a Citation Recommendation
+A natural evolution of this project would be the **development of a real-time recommendation engine that utilizes XGBoost on combined features to predict citations for a completely new, unpublished paper**. In this scenario, the model would take the metadata and abstract of a novel manuscript as input and perform a pairwise comparison against a vast library of existing papers. By calculating structural probabilities and semantic scores, the system could generate a ranked list of the most probable references the new paper should cite. 
+
+This would transition the project from a static validation tool into a proactive citation assistant, helping researchers discover relevant literature and ensure their bibliographic background is both comprehensive and semantically aligned.
+
 ## 11. Conclusions
+The objective of this project was to leverage DBLP citation network to build a predictive model for citation validity. Performing rigourous and reasoned cleaning and validation pipeline, we successfully trasformed 6.7 million raw academic records into a high-quality dataset, implementing a year-weighted chronological split that try to provide realistic temporal evaluations. Our findings confirm that **academic citation is multidimensional that cannot be accurately captured by basic data alone**, as demonstrated by the the initial-features-based models' performances.
+
+Our project showed a clear perrformance hierarcy among feature representations:
+- **identity and unique metadata** captured the basic info of the paper, that identified it;
+- **textual embeddings** provided a strong semantic link between papers by capturing the thematic content of papers;
+- **structural graph features** proved to be important in defining citation patterns;
+- **combined features** merged all the different perspectives into a unique set with a strong predictive power.
+
+Among the architectures tested, **XGBoost on combined features** was the best predictive model, achieving the highest performances while maintaining an high degree of interpretability. This model's success hihglights the **effectiveness of gradient-boostewd trees in managing different-field tabular data**. While the Transformer architectures showed significant potential for capturing complex, non-linear interactions, they required more intensive tuning to match the robustness of the tree-based approach.
+
+Loooking forward, this work provides a scalable method for academic recommendation systems. The next phase of development will focus on addressing real-world class imbalances, completing global interpretability studies and exploring end-to-end deep learning architectures like BERT to further refine contextual understanding. Ultimately, this research transitions the task from static validation toward a proactive citation assistant, capable of recommending probable references for novel research in a new scenario.
