@@ -1,16 +1,11 @@
-import pandas as pd
-import numpy as np
-import pyarrow as pa
-from matplotlib import pyplot as plt
-import os
-import re
-import glob
 from datetime import datetime
-import pyarrow.parquet as pq
-from tqdm.auto import tqdm
-from IPython.display import display, HTML
 
-# inspect fields for potential issues
+import numpy as np
+import pandas as pd
+from IPython.display import display
+from matplotlib import pyplot as plt
+from tqdm.auto import tqdm
+
 
 def inspect_authors_field(df):
     """Inspect the 'authors' field for potential issues."""
@@ -201,7 +196,6 @@ def inspect_references_field(df, id_to_year, null_placeholders, example=False):
         # apply the function to the 'references' column and sum the results
         count = df['references'].apply(is_really_missing).sum()
         return count
-    #num_nan = df['references'].isna().sum()
     num_nan = count_missing_references(df)
     print(f"\tNumber of NaN values in 'references': {num_nan}")
 
@@ -221,10 +215,6 @@ def inspect_references_field(df, id_to_year, null_placeholders, example=False):
             return all(isinstance(r, str) for r in references)
         return False
     
-    # invalid_structure_mask = ~df['references'].apply(is_valid_references_entry)
-    # num_invalid_structures = invalid_structure_mask.sum()
-    # print(f"\tNumber of entries with invalid structure (including NaN) in 'references': {num_invalid_structures}")
-
     df_no_nan = df['references'].dropna()
     invalid_structure_mask_excluding_nan = ~df_no_nan.apply(is_valid_references_entry)
     num_invalid_structures = invalid_structure_mask_excluding_nan.sum()
@@ -238,7 +228,6 @@ def inspect_references_field(df, id_to_year, null_placeholders, example=False):
                 ref_year = id_to_year.get(ref)
                 if ref_year and ref_year > paper_year:
                     newer_count += 1
-                    # print(f'Ref year {ref_year} is newer than paper year {paper_year} for reference ID {ref}')
             return newer_count
         return 0
     
@@ -252,7 +241,6 @@ def inspect_references_field(df, id_to_year, null_placeholders, example=False):
         print("Example of reference year validation for the first paper in the chunk:")
         c = df.head(1)
         print(f"\tPaper ID: {c['id'].values[0]}, Year: {c['year'].values[0]}")
-        # display(c[['id', 'year', 'references']])
 
         print(f'\tHere the complete references of the paper: {[r for r in list(c["references"].values[0])]}')
         print()
@@ -338,6 +326,5 @@ def explore_missing_values(chunks, not_values=[]):
     plt.ylabel('Percentage of Missing Values')
     plt.title('Percentage of Missing Values by Column')
     plt.show()
-
 
 

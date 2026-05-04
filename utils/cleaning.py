@@ -1,13 +1,9 @@
 import pandas as pd
-import numpy as np
-import pyarrow as pa
-from matplotlib import pyplot as plt
 import os
 import re
 import glob
 import pyarrow.parquet as pq
 from tqdm.auto import tqdm
-from IPython.display import display
 
 def tmp_authors_registry_chunks(authors_registry, chunk_size = 500_000, output_dir = "data/authors_registry_chunks"):
     """Safe checkpoints to safe the raw data of authors registry"""
@@ -75,7 +71,7 @@ def is_valid_name(name):
     return bool(re.match(r'^[A-Za-z\s]+$', name))
 
 def union_sets(series):
-        return set().union(*series)
+    return set().union(*series)
 
 def union_org_year(series):
     unique_orgs = set()
@@ -86,7 +82,7 @@ def union_org_year(series):
                     unique_orgs.add(item)
                 elif isinstance(item, dict) and 'org' in item and 'year' in item:
                     unique_orgs.add((item['org'], item['year']))
-    return list(unique_orgs.values())
+    return list(unique_orgs)
 
 def extract_author_info(df):
     """
@@ -96,10 +92,6 @@ def extract_author_info(df):
 
     for _, row in df.iterrows():
         authors_list = row.get('authors')
-        # print(f'debug 1: {len(authors_list)}')
-        
-        # if not isinstance(authors_list, list):
-        #     continue
 
         if isinstance(authors_list, str):
             try:
@@ -110,20 +102,17 @@ def extract_author_info(df):
         keywords = set(row.get('keywords')) if isinstance(row.get('keywords'), list) else set()
         lang = row.get('lang')
         year = row.get('year')
-        # print(f'\tdebug 2: {lang}, {year}')
 
         for auth in authors_list:
             auth_id = auth.get('id')
             auth_name = auth.get('name')
             auth_org = auth.get('org')
-            # print(f'\t\tdebug 3: {auth_id}, {auth_name}, {auth_org}')
 
             # id is the primary key otherwise the name
             has_id = bool(auth_id and auth_id != '')
             key = auth_id if has_id else auth_name
             if not key: 
                 continue
-            # print(f'\t\t\tdebug 4:{has_id}, {key}')
 
             author_records.append({
                 'id_or_name': key,
@@ -214,7 +203,6 @@ def refine_authors_df(df, path):
     and save the df as a parquet
     """
     tqdm.pandas(desc="Refining Authors DataFrame")
-    # df = df.pipe(assigns_ids).pipe(assign_official_name).pipe(clean_org_year)
     print("\tCleaning the names...")
     df = clean_names(df)
     print("\tCleaning the organization and year information...")
@@ -226,4 +214,3 @@ def refine_authors_df(df, path):
 
     safe_authors_registry(df, path=path)
     return df
-

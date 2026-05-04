@@ -1,7 +1,5 @@
-import pandas as pd
 import numpy as np
-from tqdm.auto import tqdm
-tqdm.pandas()
+
 
 # if we remove page_start and page_end, we will lose the possibility to calculate the number of pages, which can be a useful feature for some analysis, so we add it before removing the columns
 def add_n_pages(df):
