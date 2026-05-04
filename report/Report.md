@@ -638,15 +638,21 @@ Finally, since we tried to implement global SHAP explanations for our **Transfor
 
 > for a detailed explanation of the results found, i suggest to read the comments at the end of each group of features, in `explainability.ipynb`.
 
-In conclusion, the most significant features identified throughout this study belong to the graph-based category. Given that the problem is essentially a link prediction task, the structural properties derived from the citation network prove to be the most informative. These features, generated from the intricate connections between papers, allow the models to effectively extrapolate key patterns regarding the validity of a reference. Ultimately, the topological context of the network provides a far more robust signal for classification than initial metadata or textual embeddings alone.
-
 ### Interpret the XGBoost on Combined features
-![XGBoost for Combined features, feature importance](src/inter_xgb_comb_feat_imp.png)
 
 ![XGBoost for Combined features, SHAP value importance](src/inter_xgb_comb_SHAP.png)
 
+Given that the **XGBoost** model trained on **Combined features** achieved the highest performance, we provide a more granular global explanation of its decision-making logic:
 
+- `in_ref` **(Reference in-degree)**: This is the most significant feature identified by the model. The SHAP summary plot reveals a massive cluster of low values (blue points) reaching a SHAP value of -10. This indicates that a low number of incoming citations for a reference is a near-determinant signal, heavily driving the model toward an **invalid reference** prediction.
 
+- `common_neighbors`: As the second most powerful feature, it exhibits a distinct behavior compared to `in_ref`. While `in_ref` primarily penalizes invalid links, high values of `common_neighbors` (red points) act as a strong positive catalyst, pushing the decision toward a valid reference result.
+
+- `year_article_x`: The publication year of the article shows a clear temporal trend. More recent papers (red points) tend to push the model's decision toward a **valid reference**. This suggests that newer articles in the dataset have a higher probability of establishing legitimate connections to the cited reference paper.
+
+- `avg_neigh_degree_article`: This feature demonstrates a more distributed impact across the dataset. Specifically, low values (blue points) contribute significantly to **invalid reference** predictions, suggesting that papers connected to poorly-linked neighborhoods are less likely to form valid citations.
+
+In conclusion, the most significant features identified throughout this study belong to the graph-based category. Given that the problem is essentially a link prediction task, the structural properties derived from the citation network prove to be the most informative. These features, generated from the intricate connections between papers, allow the models to effectively extrapolate key patterns regarding the validity of a reference. Ultimately, the topological context of the network provides a far more robust signal for classification than initial metadata or textual embeddings alone.
 
 ## 10. Possible Next Steps
 ### Evaluation on a Non-Balanced Test Set
