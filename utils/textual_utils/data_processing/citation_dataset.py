@@ -3,7 +3,6 @@ from __future__ import annotations
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
-import numpy as np
 
 from .data_utils import build_vector_text_columns
 from ..features.feature_extractor import FeatureExtractor

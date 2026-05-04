@@ -72,3 +72,5 @@ Models/**/*__*__*/
 **/models/**/*.pkl
 
 Models/
+
+*.egg-info/

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 
 import json
 from datetime import datetime
-from pathlib import Path
 import pandas as pd
 import numpy as np
 
@@ -12,23 +11,26 @@ import lightgbm as lgb
 
 from sklearn.preprocessing import RobustScaler
 
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, f1_score
+from sklearn.metrics import f1_score
 
 from tqdm.auto import tqdm
 from sklearn.model_selection import PredefinedSplit, GridSearchCV, RandomizedSearchCV
 import matplotlib.pyplot as plt
 
-RANDOM_STATE=42
+RANDOM_STATE = 42
 
 from utils.embedding_transformer_utils import df_type_from_name, get_torch_device, slug
+from utils.modeling_helpers import (
+    compute_binary_pos_weight,
+    evaluate_classifier_predictions,
+    make_tensor_loader,
+    prepare_scaled_tabular_features,
+)
 from utils.textual_utils.config import PROJECT_ROOT
 
 import torch
-# Detect device: 'cuda' if available, else 'cpu'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f"Using device: {DEVICE}")
 
-# for parallelization
 N_JOBS = -1 if torch.cuda.is_available() else 1
 
 def _is_cuda_device(device) -> bool:
@@ -102,16 +104,8 @@ class BaseModel(ABC):
         """
         Calculates and prints performance metrics.
         """
-        # print(f"\n--- Evaluation for {self.model_name} ---")
-        # print(classification_report(y_true, y_pred))
-        # print("Confusion Matrix:")
-        # print(confusion_matrix(y_true, y_pred))
-
-        print(classification_report(y_true, y_pred, digits=4))
-
-        cm = confusion_matrix(y_true, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.model.classes_)
-        disp.plot(cmap="Blues")
+        display_labels = getattr(self.model, "classes_", None)
+        evaluate_classifier_predictions(y_true, y_pred, display_labels=display_labels)
 
 
     def train_pipeline(self, raw_train, frac=0.01, random_state=RANDOM_STATE, **kwargs):
@@ -132,7 +126,7 @@ class BaseModel(ABC):
             idx = rng.choice(len(X_tr), size=new_size, replace=False)
 
             X_sample = X_tr[idx]
-            y_sample = y_tr[idx]
+            y_sample = y_tr.iloc[idx] if hasattr(y_tr, "iloc") else y_tr[idx]
 
             X_tr = X_sample
             y_tr = y_sample
@@ -140,8 +134,8 @@ class BaseModel(ABC):
             raise ValueError("Frac value not Valid (should be < 1)")
     
 
-        y_tr = self.predict(X_tr)
-        self.evaluate(y_tr, y_tr)
+        y_pred = self.predict(X_tr)
+        self.evaluate(y_tr, y_pred)
 
     def test_pipeline(self, raw_test, **kwargs):
         """
@@ -178,25 +172,13 @@ class KNNModel(BaseModel):
         :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
         :param is_training: If True, fits the scaler. If False, only transforms.
         """
-        if verbose: 
-            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
-
-        # 1. drop columns that are not features (handling names based on your notebook)
-        drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
-        X = data.drop(columns=drop_cols, errors="ignore").copy()
-        y = data["is_reference_valid"].copy()
-
-        # 2. Scaling
-        if is_training:
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = self.scaler.transform(X)
-            
-        if verbose:
-            print("Label distribution:")
-            print(y.value_counts(normalize=True))
-
-        return X_scaled, y        
+        return prepare_scaled_tabular_features(
+            data,
+            self.scaler,
+            is_training=is_training,
+            verbose=verbose,
+            model_name=self.model_name,
+        )
 
     def grid_search(self, df_train, df_val, param_grid, max_tuning_samples=50000, n_jobs=N_JOBS, **kwargs) -> list:
         """ 
@@ -278,25 +260,13 @@ class XGBModel(BaseModel):
         :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
         :param is_training: If True, fits the scaler. If False, only transforms.
         """
-        if verbose: 
-            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
-
-        # 1. drop columns that are not features (handling names based on your notebook)
-        drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
-        X = data.drop(columns=drop_cols, errors="ignore").copy()
-        y = data["is_reference_valid"].copy()
-
-        # 2. Scaling
-        if is_training:
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = self.scaler.transform(X)
-            
-        if verbose:
-            print("Label distribution:")
-            print(y.value_counts(normalize=True))
-
-        return X_scaled, y        
+        return prepare_scaled_tabular_features(
+            data,
+            self.scaler,
+            is_training=is_training,
+            verbose=verbose,
+            model_name=self.model_name,
+        )
 
     def grid_search(self, df_train, df_val, param_grid, device=DEVICE, n_jobs=N_JOBS, **kwargs):
         """
@@ -376,25 +346,14 @@ class LGBModel(BaseModel):
         :param data: Dataframe containing 'embedding_article' and 'embedding_ref' columns.
         :param is_training: If True, fits the scaler. If False, only transforms.
         """
-        if verbose:
-            print(f"[{self.model_name}] Preprocessing {len(data)} rows...")
-
-        # 1. drop useless columns
-        drop_cols = ["is_reference_valid", "article_id", "ref_id", "vector_text_article", "vector_text_ref", "split"]
-        
-        X = data.drop(columns=drop_cols, errors="ignore").copy()
-        y = data["is_reference_valid"].copy()
-        feature_names = X.columns.tolist()
-
-        # 2. Scaling is generally less critical for LGBM but RobustScaler handles potential embedding outliers well
-        if is_training:
-            X_scaled = self.scaler.fit_transform(X)
-        else:
-            X_scaled = self.scaler.transform(X)
-            
-        X_scaled = pd.DataFrame(X_scaled, columns=feature_names)
-
-        return X_scaled, y
+        return prepare_scaled_tabular_features(
+            data,
+            self.scaler,
+            is_training=is_training,
+            as_dataframe=True,
+            verbose=verbose,
+            model_name=self.model_name,
+        )
 
     def grid_search(self, df_train, df_val, param_grid, n_iter=15, n_jobs=N_JOBS, **kwargs):
         """
@@ -560,25 +519,19 @@ class PairEmbeddingTransformerModel(BaseModel):
         return X, y
 
     def _make_loader(self, X, y=None, batch_size: int = 512, shuffle: bool = False):
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        if y is None:
-            dataset = TensorDataset(X_tensor)
-        else:
-            y_tensor = torch.tensor(y, dtype=torch.float32)
-            dataset = TensorDataset(X_tensor, y_tensor)
-        return DataLoader(
-            dataset,
+        return make_tensor_loader(
+            torch,
+            TensorDataset,
+            DataLoader,
+            X,
+            y,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=0,
             pin_memory=self.device.type == "cuda",
         )
 
     def _compute_pos_weight(self, y):
-        y_array = np.asarray(y, dtype=np.float32)
-        num_pos = float(y_array.sum())
-        num_neg = float(len(y_array) - num_pos)
-        return torch.tensor(num_neg / max(num_pos, 1.0), dtype=torch.float32, device=self.device)
+        return compute_binary_pos_weight(torch, y, self.device)
 
     def train(
         self,
@@ -674,22 +627,11 @@ class PairEmbeddingTransformerModel(BaseModel):
         y_true = np.asarray(y_true).astype(int)
         y_pred = np.asarray(y_pred).astype(int)
 
-        report = classification_report(y_true, y_pred, digits=4, output_dict=True)
-        print(classification_report(y_true, y_pred, digits=4))
-
-        cm = confusion_matrix(y_true, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
-        disp.plot(cmap="Blues")
+        metrics = evaluate_classifier_predictions(y_true, y_pred, display_labels=[0, 1], output_dict=True)
         if title:
             plt.title(title)
             plt.show()
 
-        metrics = {
-            "accuracy": float(report["accuracy"]),
-            "f1_weighted": float(report["weighted avg"]["f1-score"]),
-            "precision_weighted": float(report["weighted avg"]["precision"]),
-            "recall_weighted": float(report["weighted avg"]["recall"]),
-        }
         self.last_metrics = metrics
         return metrics
 
@@ -889,25 +831,19 @@ class SimpleTransformer(BaseModel):
         return X_scaled.astype(np.float32), y
 
     def _make_loader(self, X, y=None, batch_size: int = 512, shuffle: bool = False):
-        X_tensor = torch.tensor(X, dtype=torch.float32)
-        if y is None:
-            dataset = TensorDataset(X_tensor)
-        else:
-            y_tensor = torch.tensor(y, dtype=torch.float32)
-            dataset = TensorDataset(X_tensor, y_tensor)
-        return DataLoader(
-            dataset,
+        return make_tensor_loader(
+            torch,
+            TensorDataset,
+            DataLoader,
+            X,
+            y,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=0,
             pin_memory=self.device.type == "cuda",
         )
 
     def _compute_pos_weight(self, y):
-        y_array = np.asarray(y, dtype=np.float32)
-        num_pos = float(y_array.sum())
-        num_neg = float(len(y_array) - num_pos)
-        return torch.tensor(num_neg / max(num_pos, 1.0), dtype=torch.float32, device=self.device)
+        return compute_binary_pos_weight(torch, y, self.device)
 
     def train(
         self,
@@ -1006,22 +942,11 @@ class SimpleTransformer(BaseModel):
         y_true = np.asarray(y_true).astype(int)
         y_pred = np.asarray(y_pred).astype(int)
 
-        report = classification_report(y_true, y_pred, digits=4, output_dict=True)
-        print(classification_report(y_true, y_pred, digits=4))
-
-        cm = confusion_matrix(y_true, y_pred)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
-        disp.plot(cmap="Blues")
+        metrics = evaluate_classifier_predictions(y_true, y_pred, display_labels=[0, 1], output_dict=True)
         if title:
             plt.title(title)
             plt.show()
 
-        metrics = {
-            "accuracy": float(report["accuracy"]),
-            "f1_weighted": float(report["weighted avg"]["f1-score"]),
-            "precision_weighted": float(report["weighted avg"]["precision"]),
-            "recall_weighted": float(report["weighted avg"]["recall"]),
-        }
         self.last_metrics = metrics
         return metrics
 

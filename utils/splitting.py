@@ -5,7 +5,6 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import os
-import pyarrow.parquet as pq
 from tqdm.auto import tqdm
 tqdm.pandas()
 

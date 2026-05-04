@@ -1,4 +1,3 @@
-import os
 import json
 import uuid
 import joblib
@@ -12,11 +11,18 @@ except ImportError:
     PreTrainedModel, PreTrainedTokenizer = None, None
 
 class LocalModelRegistry:
+<<<<<<< HEAD
     """A local Model Registry that stores experiments in an organized way."""
     def __init__(self, registry_base_path: str = None):
         if registry_base_path is None:
             # "models/" is the recommended folder to ignore in git
             # Save at the same level as notebooks
+=======
+    """Local model registry that stores experiments in an organized layout."""
+    def __init__(self, registry_base_path: str = None):
+        if registry_base_path is None:
+            # Store artifacts at the project root, next to the notebooks folder.
+>>>>>>> code-cleaning
             PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
             self.base_path = PROJECT_ROOT / "Models" / "embedding_based"
         else:
@@ -67,5 +73,9 @@ class LocalModelRegistry:
         else:
             joblib.dump(model, run_dir / "model.joblib")
             
+<<<<<<< HEAD
         print(f"✅ Model artifact saved successfully in: {run_dir}")
+=======
+        print(f"Model artifact saved successfully in: {run_dir}")
+>>>>>>> code-cleaning
         return run_dir

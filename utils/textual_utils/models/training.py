@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import pickle
-from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import numpy as np

@@ -103,10 +103,6 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id
     # of the graph
     katz_cent = nx.katz_centrality(graph)
     
-    # Compute the shortest-path betweenness 
-    # centrality for nodes
-    #betw_cent = nx.betweenness_centrality(graph, k=None, normalized=True)
-
     # Add to the DataFrame the nodes
     # features of node A and B
     nodes_names = {
@@ -120,7 +116,6 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id
         df_feats[f"pagerank_{name}"] = df_feats[col].map(pagerank).fillna(0)
         df_feats[f"avg_neigh_degree_{name}"] = df_feats[col].map(avg_neigh_degree).fillna(0)
         df_feats[f"katz_cent_{name}"] = df_feats[col].map(katz_cent).fillna(0)
-        #df_feats[f"betw_cent_a"] = df_feats["node_a"].map(betw_cent).fillna(0)
     
     # Compute and append to the DataFrame...
     # ...the ratio of papers that the two paper cite
@@ -150,5 +145,4 @@ def features_generation(graph: nx.DiGraph, df: pd.DataFrame, art_id: str, ref_id
         ]
 
     return df_feats
-
 

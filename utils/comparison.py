@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from IPython.display import display
 
-
 def load_latest_models(base_path='./Models', n_jobs=1):
     """
     Creates a nested dictionary registry.

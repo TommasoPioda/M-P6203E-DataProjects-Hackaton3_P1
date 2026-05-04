@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import numpy as np
+import pandas as pd
 
-# Use sklearn for stability with list inputs
 from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 
