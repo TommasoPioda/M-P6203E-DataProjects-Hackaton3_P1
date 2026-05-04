@@ -26,6 +26,8 @@ dependencies:
   - torchvision
   - torchaudio
   - pytorch-cuda=12.4
+  - shap
+  - lime
   - pip:
       - sentence-transformers
       - transformers
